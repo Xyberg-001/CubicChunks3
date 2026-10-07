@@ -13,9 +13,6 @@ import io.github.notstirred.dasm.api.annotations.redirect.sets.RedirectSet;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.opencubicchunks.cc_core.world.level.CloPos;
 import io.github.opencubicchunks.cubicchunks.exception.DasmFailedToApply;
-import io.github.opencubicchunks.cubicchunks.movetoforgesourcesetlater.CCCommonHooks;
-import io.github.opencubicchunks.cubicchunks.movetoforgesourcesetlater.CCEventHooks;
-import io.github.opencubicchunks.cubicchunks.movetoforgesourcesetlater.EventConstructorDelegates;
 import io.github.opencubicchunks.cubicchunks.server.level.CloTrackingView;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.CloAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.ImposterProtoClo;
@@ -49,6 +46,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ImposterProtoChunk;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
@@ -57,10 +55,6 @@ import net.minecraft.world.level.levelgen.blending.BlendingData;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.ticks.LevelChunkTicks;
 import net.minecraft.world.ticks.ProtoChunkTicks;
-import net.neoforged.bus.api.Event;
-import net.neoforged.neoforge.common.CommonHooks;
-import net.neoforged.neoforge.event.EventHooks;
-import net.neoforged.neoforge.event.level.ChunkEvent;
 
 /**
  * Should be used for DASM transforms that work with Clos (i.e. work with both Chunks and Cubes) <br/>
@@ -78,11 +72,14 @@ public interface ChunkToCloSet extends GlobalSet {
         @FieldRedirect("INVALID_CHUNK_POS:J")
         static final long INVALID_CLO_POS = Long.MAX_VALUE;
 
-        @FieldToMethodRedirect("x:I")
+        @MethodRedirect("x()I")
         native int getX();
 
-        @FieldToMethodRedirect("z:I")
+        @MethodRedirect("z()I")
         native int getZ();
+
+        @MethodRedirect("pack()J")
+        native long toLong();
 
         // Note that this relies on ChunkPos and CloPos encoding to longs in the same way
         @ConstructorToFactoryRedirect("<init>(J)V")
@@ -91,7 +88,7 @@ public interface ChunkToCloSet extends GlobalSet {
         @ConstructorToFactoryRedirect("<init>(II)V")
         static native CloPos chunk(int x, int z);
 
-        @MethodRedirect("asLong(II)J")
+        @MethodRedirect("pack(II)J")
         static native long chunkAsLong(int x, int z);
     }
 
@@ -135,10 +132,10 @@ public interface ChunkToCloSet extends GlobalSet {
     @TypeRedirect(from = @Ref(ProtoChunk.class), to = @Ref(ProtoClo.class))
     interface ProtoChunk_to_ProtoClo_redirects extends ChunkAccess_to_CloAccess_redirects {
         @ConstructorToFactoryRedirect("<init>(Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/world/level/chunk/UpgradeData;"
-                + "Lnet/minecraft/world/level/LevelHeightAccessor;Lnet/minecraft/core/Registry;"
+                + "Lnet/minecraft/world/level/LevelHeightAccessor;Lnet/minecraft/world/level/chunk/PalettedContainerFactory;"
                 + "Lnet/minecraft/world/level/levelgen/blending/BlendingData;)V")
         static ProtoClo create(
-                CloPos cloPos, UpgradeData upgradeData, LevelHeightAccessor levelHeightAccessor, Registry<Biome> biomeRegistry,
+                CloPos cloPos, UpgradeData upgradeData, LevelHeightAccessor levelHeightAccessor, PalettedContainerFactory containerFactory,
                 @Nullable BlendingData blendingData
         ) {
             throw new DasmFailedToApply();
@@ -146,11 +143,11 @@ public interface ChunkToCloSet extends GlobalSet {
 
         @ConstructorToFactoryRedirect("<init>(Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/world/level/chunk/UpgradeData;"
                 + "[Lnet/minecraft/world/level/chunk/LevelChunkSection;Lnet/minecraft/world/ticks/ProtoChunkTicks;"
-                + "Lnet/minecraft/world/ticks/ProtoChunkTicks;Lnet/minecraft/world/level/LevelHeightAccessor;Lnet/minecraft/core/Registry;"
+                + "Lnet/minecraft/world/ticks/ProtoChunkTicks;Lnet/minecraft/world/level/LevelHeightAccessor;Lnet/minecraft/world/level/chunk/PalettedContainerFactory;"
                 + "Lnet/minecraft/world/level/levelgen/blending/BlendingData;)V")
         static ProtoClo create(
                 CloPos cloPos, UpgradeData upgradeData, @Nullable LevelChunkSection[] sections, ProtoChunkTicks<Block> blockTicks,
-                ProtoChunkTicks<Fluid> liquidTicks, LevelHeightAccessor levelHeightAccessor, Registry<Biome> biomeRegistry,
+                ProtoChunkTicks<Fluid> liquidTicks, LevelHeightAccessor levelHeightAccessor, PalettedContainerFactory containerFactory,
                 @Nullable BlendingData blendingData
         ) {
             throw new DasmFailedToApply();
@@ -176,32 +173,7 @@ public interface ChunkToCloSet extends GlobalSet {
 
     // region [Forge stuff]
     // TODO move to a forge-specific sourceset
-    @TypeRedirect(from = @Ref(ChunkEvent.Load.class), to = @Ref(Event.class))
-    abstract class ChunkEvent$Load_to_Event_redirects {}
 
-    @InterOwnerContainer(from = @Ref(ChunkEvent.Load.class), to = @Ref(EventConstructorDelegates.class))
-    abstract class ChunkEvent$Load_delegateConstruction {
-        @ConstructorToFactoryRedirect("<init>(Lnet/minecraft/world/level/chunk/LevelChunk;Z)V")
-        static native Event create_ChunkEvent$Load(LevelCube levelCube, boolean newChunk);
-    }
-
-    @TypeRedirect(from = @Ref(ChunkEvent.Unload.class), to = @Ref(Event.class))
-    abstract class ChunkEvent$Unload_to_Event_redirects {}
-
-    @InterOwnerContainer(from = @Ref(ChunkEvent.Unload.class), to = @Ref(EventConstructorDelegates.class))
-    abstract class ChunkEvent$Unload_delegateConstruction {
-        @ConstructorToFactoryRedirect("<init>(Lnet/minecraft/world/level/chunk/LevelChunk;)V")
-        static native Event create_ChunkEvent$Unload(LevelCube levelCube);
-    }
-
-    @IntraOwnerContainer(@Ref(GenerationChunkHolder.class))
-    abstract class GenerationChunkHolder_Forge_Jank_redirects {
-        @FieldToMethodRedirect(value = "currentlyLoading:Lnet/minecraft/world/level/chunk/LevelChunk;", setter = "cc_setCurrentlyLoading")
-        public native LevelClo cc_getCurrentlyLoading();
-    }
-
-    @IntraOwnerContainer(@Ref(ChunkHolder.class))
-    abstract class ChunkHolder_Forge_Jank_redirects extends GenerationChunkHolder_Forge_Jank_redirects {}
     // endregion
 
     @IntraOwnerContainer(@Ref(ChunkHolder.class))
@@ -239,12 +211,6 @@ public interface ChunkToCloSet extends GlobalSet {
 
     @IntraOwnerContainer(@Ref(PlayerChunkSender.class))
     class PlayerChunkSender_redirects {}
-
-    @InterOwnerContainer(from = @Ref(EventHooks.class), to = @Ref(CCEventHooks.class))
-    class EventHooks_to_CCEventHooks_redirects {}
-
-    @InterOwnerContainer(from = @Ref(CommonHooks.class), to = @Ref(CCCommonHooks.class))
-    class CommonHooks_to_CCCommonHooks_redirects {}
 
     @IntraOwnerContainer(@Ref(ChunkTaskDispatcher.class))
     class ChunkTaskDispatcher_redirects {}

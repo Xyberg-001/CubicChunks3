@@ -16,8 +16,6 @@ import io.github.notstirred.dasm.api.annotations.redirect.sets.RedirectSet;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache;
-import io.github.opencubicchunks.cubicchunks.movetoforgesourcesetlater.CCCommonHooks;
-import io.github.opencubicchunks.cubicchunks.movetoforgesourcesetlater.EventConstructorDelegates;
 import io.github.opencubicchunks.cubicchunks.server.level.CubeHolder;
 import io.github.opencubicchunks.cubicchunks.server.level.CubeLevel;
 import io.github.opencubicchunks.cubicchunks.server.level.GeneratingCubeMap;
@@ -58,9 +56,6 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.chunk.status.ChunkStatusTask;
 import net.minecraft.world.level.chunk.status.ChunkStatusTasks;
 import net.minecraft.world.level.chunk.status.ChunkStep;
-import net.neoforged.bus.api.Event;
-import net.neoforged.neoforge.common.CommonHooks;
-import net.neoforged.neoforge.event.level.ChunkEvent;
 
 /**
  * Should be used for DASM transforms that work with only Cubes (as opposed to working with both Chunks and Cubes) <br/>
@@ -78,13 +73,13 @@ public interface ChunkToCubeSet extends GlobalSet {
         @FieldRedirect("INVALID_CHUNK_POS:J")
         static final long INVALID_CUBE_POS = Long.MAX_VALUE;
 
-        @FieldToMethodRedirect("x:I")
+        @MethodRedirect("x()I")
         native int getX();
 
-        @FieldToMethodRedirect("z:I")
+        @MethodRedirect("z()I")
         native int getZ();
 
-        @MethodRedirect("toLong()J")
+        @MethodRedirect("pack()J")
         native long asLong();
 
         // Dummy methods that throw errors; these should be manually redirected to the correct x,y,z methods using mixin.
@@ -92,7 +87,7 @@ public interface ChunkToCubeSet extends GlobalSet {
         @ConstructorToFactoryRedirect("<init>(II)V")
         static native CubePos dummy_fromChunkCoords(int x, int z);
 
-        @MethodRedirect("asLong(II)J")
+        @MethodRedirect("pack(II)J")
         static native long dummy_chunkAsLong(int x, int z);
     }
 
@@ -190,29 +185,7 @@ public interface ChunkToCubeSet extends GlobalSet {
 
     // region [Forge stuff]
     // TODO move to a forge-specific sourceset
-    @TypeRedirect(from = @Ref(ChunkEvent.Load.class), to = @Ref(Event.class))
-    abstract class ChunkEvent$Load_to_Event_redirects {}
 
-    @InterOwnerContainer(from = @Ref(ChunkEvent.Load.class), to = @Ref(EventConstructorDelegates.class))
-    abstract class ChunkEvent$Load_delegateConstruction {
-        @ConstructorToFactoryRedirect("<init>(Lnet/minecraft/world/level/chunk/LevelChunk;Z)V")
-        static native Event create_ChunkEvent$Load(LevelCube levelCube, boolean newChunk);
-    }
-
-    @TypeRedirect(from = @Ref(ChunkEvent.Unload.class), to = @Ref(Event.class))
-    abstract class ChunkEvent$Unload_to_Event_redirects {}
-
-    @InterOwnerContainer(from = @Ref(ChunkEvent.Unload.class), to = @Ref(EventConstructorDelegates.class))
-    abstract class ChunkEvent$Unload_delegateConstruction {
-        @ConstructorToFactoryRedirect("<init>(Lnet/minecraft/world/level/chunk/LevelChunk;)V")
-        static native Event create_ChunkEvent$Unload(LevelCube levelCube);
-    }
-
-    @IntraOwnerContainer(@Ref(GenerationChunkHolder.class))
-    abstract class GenerationChunkHolder_Forge_Jank_redirects {}
-
-    @IntraOwnerContainer(@Ref(ChunkHolder.class))
-    abstract class ChunkHolder_Forge_Jank_redirects extends GenerationChunkHolder_Forge_Jank_redirects {}
     // endregion
 
     @InterOwnerContainer(from = @Ref(ChunkLevel.class), to = @Ref(CubeLevel.class))
@@ -244,9 +217,6 @@ public interface ChunkToCubeSet extends GlobalSet {
 
     @IntraOwnerContainer(@Ref(SectionOcclusionGraph.class))
     class SectionOcclusionGraph_redirects {}
-
-    @InterOwnerContainer(from = @Ref(CommonHooks.class), to = @Ref(CCCommonHooks.class))
-    class CommonHooks_to_CCCommonHooks_redirects {}
 
     @IntraOwnerContainer(@Ref(Level.class))
     class Level_redirects {}

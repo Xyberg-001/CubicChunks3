@@ -1,4 +1,4 @@
 [submodule "CubicChunksCore"]
 	path = CubicChunksCore
-	url = https://github.com/OpenCubicChunks/CubicChunksCore
-	branch = dev
+	url = https://github.com/Xyberg-001/CubicChunksCore
+	branch = fabric-26.3

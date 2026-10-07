@@ -40,6 +40,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.gameevent.GameEventListenerRegistry;
@@ -80,7 +81,8 @@ public abstract class CubeAccess implements CloAccess {
 
     // Constructor signature matches ChunkAccess for DASM redirect purposes
     public CubeAccess(
-            CubePos cubePos, UpgradeData upgradeData, LevelHeightAccessor levelHeightAccessor, Registry<Biome> biomeRegistry, long inhabitedTime,
+            CubePos cubePos, UpgradeData upgradeData, LevelHeightAccessor levelHeightAccessor, PalettedContainerFactory containerFactory,
+            long inhabitedTime,
             @Nullable LevelChunkSection[] chunkSections, @Nullable BlendingData blendingData
     ) {
         this.cubePos = cubePos;
@@ -100,13 +102,13 @@ public abstract class CubeAccess implements CloAccess {
             }
         }
 
-        replaceMissingSections(biomeRegistry, this.sections);
+        replaceMissingSections(containerFactory, this.sections);
     }
 
-    private static void replaceMissingSections(Registry<Biome> biomeRegistry, LevelChunkSection[] sections) {
+    private static void replaceMissingSections(PalettedContainerFactory containerFactory, LevelChunkSection[] sections) {
         for (int i = 0; i < sections.length; ++i) {
             if (sections[i] == null) {
-                sections[i] = new LevelChunkSection(biomeRegistry);
+                sections[i] = new LevelChunkSection(containerFactory);
             }
         }
     }

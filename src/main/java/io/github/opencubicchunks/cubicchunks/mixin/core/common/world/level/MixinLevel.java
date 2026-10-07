@@ -275,20 +275,5 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
         }
     }
 
-    // getCurrentDifficultyAt
-    // This function isn't worth trying to wrap due to its complexity, so we just replace it entirely
-    // Local difficulty is not something people mod so this is fine
-    @Inject(method = "getCurrentDifficultyAt", at = @At(value = "HEAD"), cancellable = true)
-    private void cc_replaceGetCurrentDifficultyAt(BlockPos blockPos, CallbackInfoReturnable<DifficultyInstance> cir) {
-        if (cc_isCubic) {
-            long i = 0L;
-            float f = 0.0F;
-            if (this.cc_hasCubeAt(blockPos)) {
-                f = this.getMoonBrightness();
-                i = this.cc_getCubeAt(blockPos).getInhabitedTime();
-            }
-            cir.setReturnValue(new DifficultyInstance(this.getDifficulty(), this.getDayTime(), i, f));
-        }
-    }
     // TODO: Phase 3 low priority: Add a method to modify isOutsideSpawnableHeight to respect the limits of the packing for CloPos
 }

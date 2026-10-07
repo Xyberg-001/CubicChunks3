@@ -22,8 +22,8 @@ public record CCClientboundLevelChunkPacket(ChunkPos pos) implements CustomPacke
 
     public static class Handler implements CCPayloadHandler<CCClientboundLevelChunkPacket> {
         @Override public void handle(CCClientboundLevelChunkPacket payload, Player player) {
-            int x = payload.pos.x;
-            int z = payload.pos.z;
+            int x = payload.pos.x();
+            int z = payload.pos.z();
             // TODO P2 :: This will contain heightmap data and some other stuff
             updateLevelChunk(player.level(), x, z);
         }

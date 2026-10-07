@@ -98,7 +98,7 @@ public class LevelCube extends CubeAccess implements LevelClo {
             Level level, CubePos pos, UpgradeData data, LevelChunkTicks<Block> blockTicks, LevelChunkTicks<Fluid> fluidTicks, long inhabitedTime,
             @Nullable LevelChunkSection[] sections, @Nullable LevelCube.PostLoadProcessor postLoad, @Nullable BlendingData blendingData
     ) {
-        super(pos, data, level, level.registryAccess().lookupOrThrow(Registries.BIOME), inhabitedTime, sections, blendingData);
+        super(pos, data, level, level.palettedContainerFactory(), inhabitedTime, sections, blendingData);
         this.level = level;
         this.gameEventListenerRegistrySections = new Int2ObjectOpenHashMap<>();
 
@@ -209,7 +209,7 @@ public class LevelCube extends CubeAccess implements LevelClo {
                             SectionPos.blockToSectionCoord(pos.getY()), SectionPos.blockToSectionCoord(pos.getZ()), isOnlyAir);
                 }
 
-                if (LightEngine.hasDifferentLightProperties(this, pos, previousState, state)) {
+                if (LightEngine.hasDifferentLightProperties(previousState, state)) {
                     // TODO (P2) lighting - see vanilla equivalent to this method
                 }
 
@@ -217,7 +217,7 @@ public class LevelCube extends CubeAccess implements LevelClo {
                 boolean flag2 = (flags & Block.UPDATE_MOVE_BY_PISTON) != 0;
                 boolean flag3 = (flags & Block.UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS) == 0;
                 if (flag4 && previousState.hasBlockEntity()) {
-                    if (!this.level.isClientSide && flag3) {
+                    if (!this.level.isClientSide() && flag3) {
                         BlockEntity blockentity = this.level.getBlockEntity(pos);
                         if (blockentity != null) {
                             blockentity.preRemoveSideEffects(pos, previousState);
@@ -234,7 +234,7 @@ public class LevelCube extends CubeAccess implements LevelClo {
                 if (!chunkSection.getBlockState(sectionLocalX, sectionLocalY, sectionLocalZ).is(block)) {
                     return null;
                 } else {
-                    if (!this.level.isClientSide && !this.level.captureBlockSnapshots && (flags & Block.UPDATE_SKIP_ON_PLACE) == 0) {
+                    if (!this.level.isClientSide() && (flags & Block.UPDATE_SKIP_ON_PLACE) == 0) {
                         state.onPlace(this.level, pos, previousState, flag2);
                     }
 
@@ -242,7 +242,7 @@ public class LevelCube extends CubeAccess implements LevelClo {
                         BlockEntity blockentity1 = this.getBlockEntity(pos, LevelChunk.EntityCreationType.CHECK);
                         if (blockentity1 != null && !blockentity1.isValidBlockState(state)) {
                             LOGGER.warn("Found mismatched block entity @ {}: type = {}, state = {}", pos,
-                                    blockentity1.getType().builtInRegistryHolder().key().location(), state);
+                                    blockentity1.getType().builtInRegistryHolder().key().identifier(), state);
                             this.removeBlockEntity(pos);
                             blockentity1 = null;
                         }
@@ -332,7 +332,7 @@ public class LevelCube extends CubeAccess implements LevelClo {
             outputTagConsumer.accept((pos, blockEntityType, tag) -> {
                 BlockEntity blockentity = this.getBlockEntity(pos, LevelChunk.EntityCreationType.IMMEDIATE);
                 if (blockentity != null && tag != null && blockentity.getType() == blockEntityType) {
-                    blockentity.handleUpdateTag(TagValueInput.create(problemreporter$scopedcollector.forChild(blockentity.problemPath()),
+                    blockentity.loadWithComponents(TagValueInput.create(problemreporter$scopedcollector.forChild(blockentity.problemPath()),
                             this.level.registryAccess(), tag));
                 }
             });

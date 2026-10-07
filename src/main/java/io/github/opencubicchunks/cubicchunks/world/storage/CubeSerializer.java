@@ -32,7 +32,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.ShortTag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
@@ -41,10 +41,10 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.CarvingMask;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.PalettedContainerRO;
 import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
@@ -63,15 +63,13 @@ import org.slf4j.Logger;
  * written to NBT off it; saved NBT is {@link #parse parsed} off the server thread and {@link Parsed#read read} into a cube on it.
  * <p>
  * Saved: the sections' blocks and biomes, block entities, block and fluid ticks, post-processing, structure starts and references, the
- * generation status, inhabited time, and for cubes still generating their pending entities and carving mask. Not yet: light and heightmaps
+ * generation status, inhabited time, and for cubes still generating their pending entities. Not yet: light and heightmaps
  * (cubes have neither yet), and entities of finished cubes (they need cubic entity storage).
  */
 public final class CubeSerializer {
     private static final Logger LOGGER = LogUtils.getLogger();
     /** Version of this format, so later changes can read cubes saved before them. */
     public static final int FORMAT_VERSION = 1;
-    private static final Codec<PalettedContainer<BlockState>> BLOCK_STATE_CODEC = PalettedContainer.codecRW(
-            Block.BLOCK_STATE_REGISTRY, BlockState.CODEC, PalettedContainer.Strategy.SECTION_STATES, Blocks.AIR.defaultBlockState());
     private static final Codec<List<SavedTick<Block>>> BLOCK_TICKS_CODEC = SavedTick.codec(BuiltInRegistries.BLOCK.byNameCodec()).listOf();
     private static final Codec<List<SavedTick<Fluid>>> FLUID_TICKS_CODEC = SavedTick.codec(BuiltInRegistries.FLUID.byNameCodec()).listOf();
 
@@ -85,8 +83,8 @@ public final class CubeSerializer {
 
     /** What is saved of a cube, copied on the server thread so it can be written to NBT on another. */
     public record Snapshot(
-            Registry<Biome> biomeRegistry, CubePos pos, long lastUpdate, long inhabitedTime, ChunkStatus status, LevelChunkSection[] sections,
-            List<CompoundTag> blockEntities, List<CompoundTag> entities, @Nullable long[] carvingMask, ChunkAccess.PackedTicks ticks,
+            PalettedContainerFactory containerFactory, CubePos pos, long lastUpdate, long inhabitedTime, ChunkStatus status,
+            LevelChunkSection[] sections, List<CompoundTag> blockEntities, List<CompoundTag> entities, ChunkAccess.PackedTicks ticks,
             ShortList[] postProcessing, boolean lightCorrect, CompoundTag structures
     ) {
         public CompoundTag write() {
@@ -99,7 +97,6 @@ public final class CubeSerializer {
             tag.putLong("InhabitedTime", inhabitedTime);
             tag.putString("Status", BuiltInRegistries.CHUNK_STATUS.getKey(status).toString());
 
-            Codec<PalettedContainerRO<Holder<Biome>>> biomeCodec = biomeCodec(biomeRegistry);
             ListTag sectionList = new ListTag();
             for (int i = 0; i < sections.length; i++) {
                 LevelChunkSection section = sections[i];
@@ -108,8 +105,8 @@ public final class CubeSerializer {
                 }
                 CompoundTag sectionTag = new CompoundTag();
                 sectionTag.putByte("i", (byte) i);
-                sectionTag.store("block_states", BLOCK_STATE_CODEC, section.getStates());
-                sectionTag.store("biomes", biomeCodec, section.getBiomes());
+                sectionTag.store("block_states", containerFactory.blockStatesContainerCodec(), section.getStates());
+                sectionTag.store("biomes", containerFactory.biomeContainerCodec(), section.getBiomes());
                 sectionList.add(sectionTag);
             }
             tag.put("sections", sectionList);
@@ -124,9 +121,6 @@ public final class CubeSerializer {
                 ListTag entityList = new ListTag();
                 entityList.addAll(entities);
                 tag.put("entities", entityList);
-                if (carvingMask != null) {
-                    tag.putLongArray("carving_mask", carvingMask);
-                }
             }
 
             tag.store("block_ticks", BLOCK_TICKS_CODEC, ticks.blocks());
@@ -159,13 +153,8 @@ public final class CubeSerializer {
 
         ChunkStatus status = cube.getPersistedStatus();
         List<CompoundTag> entities = new ArrayList<>();
-        long[] carvingMask = null;
         if (status.getChunkType() == ChunkType.PROTOCHUNK && cube instanceof ProtoCube protoCube) {
             entities.addAll(protoCube.getEntities());
-            CarvingMask mask = protoCube.getCarvingMask();
-            if (mask != null) {
-                carvingMask = mask.toArray();
-            }
         }
 
         ShortList[] postProcessing = Arrays.stream(cube.getPostProcessing())
@@ -174,15 +163,15 @@ public final class CubeSerializer {
         CompoundTag structures = packStructures(StructurePieceSerializationContext.fromLevel(level), chunkPosOf(pos), cube.getAllStarts(),
                 cube.getAllReferences());
 
-        return new Snapshot(level.registryAccess().lookupOrThrow(Registries.BIOME), pos, level.getGameTime(), cube.getInhabitedTime(), status,
-                sections, blockEntities, entities, carvingMask, cube.getTicksForSerialization(level.getGameTime()), postProcessing,
+        return new Snapshot(level.palettedContainerFactory(), pos, level.getGameTime(), cube.getInhabitedTime(), status,
+                sections, blockEntities, entities, cube.getTicksForSerialization(level.getGameTime()), postProcessing,
                 cube.isLightCorrect(), structures);
     }
 
     /** A saved cube read from NBT, ready to be turned into a cube on the server thread. */
     public record Parsed(
             CubePos pos, long inhabitedTime, ChunkStatus status, LevelChunkSection[] sections, List<CompoundTag> blockEntities,
-            List<CompoundTag> entities, @Nullable long[] carvingMask, ChunkAccess.PackedTicks ticks, ShortList[] postProcessing,
+            List<CompoundTag> entities, ChunkAccess.PackedTicks ticks, ShortList[] postProcessing,
             boolean lightCorrect, CompoundTag structures
     ) {
         /**
@@ -193,7 +182,6 @@ public final class CubeSerializer {
             if (!pos.equals(expected)) {
                 LOGGER.error("Cube saved at {} says it is {}; loading it at {}", expected, pos, expected);
             }
-            Registry<Biome> biomeRegistry = level.registryAccess().lookupOrThrow(Registries.BIOME);
             Map<Structure, StructureStart> starts = unpackStructureStarts(StructurePieceSerializationContext.fromLevel(level), structures,
                     level.getSeed());
             Map<Structure, LongSet> references = unpackStructureReferences(level.registryAccess(), structures);
@@ -209,7 +197,7 @@ public final class CubeSerializer {
             }
 
             ProtoCube cube = new ProtoCube(expected, UpgradeData.EMPTY, sections, ProtoChunkTicks.load(ticks.blocks()),
-                    ProtoChunkTicks.load(ticks.fluids()), level, biomeRegistry, null);
+                    ProtoChunkTicks.load(ticks.fluids()), level, level.palettedContainerFactory(), null);
             cube.setInhabitedTime(inhabitedTime);
             cube.setPersistedStatus(status);
             if (status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT)) {
@@ -224,9 +212,6 @@ public final class CubeSerializer {
             }
             for (CompoundTag blockEntity : blockEntities) {
                 cube.setBlockEntityNbt(blockEntity);
-            }
-            if (carvingMask != null) {
-                cube.setCarvingMask(new CarvingMask(carvingMask, cube.getMinY()));
             }
             return cube;
         }
@@ -247,8 +232,7 @@ public final class CubeSerializer {
         }
         CubePos pos = CubePos.of(tag.getIntOr("xPos", 0), tag.getIntOr("yPos", 0), tag.getIntOr("zPos", 0));
         ChunkStatus status = statusOf(tag);
-        Registry<Biome> biomeRegistry = registries.lookupOrThrow(Registries.BIOME);
-        Codec<PalettedContainerRO<Holder<Biome>>> biomeCodec = biomeCodec(biomeRegistry);
+        PalettedContainerFactory containerFactory = PalettedContainerFactory.create(registries);
 
         LevelChunkSection[] sections = new LevelChunkSection[CubicConstants.SECTION_COUNT];
         ListTag sectionList = tag.getListOrEmpty("sections");
@@ -260,17 +244,15 @@ public final class CubeSerializer {
                 continue;
             }
             PalettedContainer<BlockState> states = sectionTag.getCompound("block_states")
-                    .map(states1 -> BLOCK_STATE_CODEC.parse(NbtOps.INSTANCE, states1)
+                    .map(states1 -> containerFactory.blockStatesContainerCodec().parse(NbtOps.INSTANCE, states1)
                             .promotePartial(error -> logErrors(pos, i, error))
                             .getOrThrow(CubeReadException::new))
-                    .orElseGet(() -> new PalettedContainer<>(Block.BLOCK_STATE_REGISTRY, Blocks.AIR.defaultBlockState(),
-                            PalettedContainer.Strategy.SECTION_STATES));
+                    .orElseGet(containerFactory::createForBlockStates);
             PalettedContainerRO<Holder<Biome>> biomes = sectionTag.getCompound("biomes")
-                    .map(biomes1 -> biomeCodec.parse(NbtOps.INSTANCE, biomes1)
+                    .map(biomes1 -> containerFactory.biomeContainerCodec().parse(NbtOps.INSTANCE, biomes1)
                             .promotePartial(error -> logErrors(pos, i, error))
                             .getOrThrow(CubeReadException::new))
-                    .orElseGet(() -> new PalettedContainer<>(biomeRegistry.asHolderIdMap(), biomeRegistry.getOrThrow(Biomes.PLAINS),
-                            PalettedContainer.Strategy.SECTION_BIOMES));
+                    .orElseGet(containerFactory::createForBiomes);
             sections[i] = new LevelChunkSection(states, biomes);
         }
 
@@ -288,7 +270,6 @@ public final class CubeSerializer {
         return new Parsed(pos, tag.getLongOr("InhabitedTime", 0L), status, sections,
                 tag.getListOrEmpty("block_entities").compoundStream().toList(),
                 tag.getListOrEmpty("entities").compoundStream().toList(),
-                tag.getLongArray("carving_mask").orElse(null),
                 new ChunkAccess.PackedTicks(tag.read("block_ticks", BLOCK_TICKS_CODEC).orElse(List.of()),
                         tag.read("fluid_ticks", FLUID_TICKS_CODEC).orElse(List.of())),
                 postProcessing, tag.getBooleanOr("isLightOn", false), tag.getCompoundOrEmpty("structures"));
@@ -313,11 +294,6 @@ public final class CubeSerializer {
         };
     }
 
-    private static Codec<PalettedContainerRO<Holder<Biome>>> biomeCodec(Registry<Biome> biomeRegistry) {
-        return PalettedContainer.codecRO(biomeRegistry.asHolderIdMap(), biomeRegistry.holderByNameCodec(), PalettedContainer.Strategy.SECTION_BIOMES,
-                biomeRegistry.getOrThrow(Biomes.PLAINS));
-    }
-
     private static ChunkPos chunkPosOf(CubePos pos) {
         return new ChunkPos(Coords.cubeToSection(pos.getX(), 0), Coords.cubeToSection(pos.getZ(), 0));
     }
@@ -329,7 +305,7 @@ public final class CubeSerializer {
         CompoundTag startsTag = new CompoundTag();
         Registry<Structure> registry = context.registryAccess().lookupOrThrow(Registries.STRUCTURE);
         for (Map.Entry<Structure, StructureStart> entry : starts.entrySet()) {
-            ResourceLocation key = registry.getKey(entry.getKey());
+            Identifier key = registry.getKey(entry.getKey());
             startsTag.put(key.toString(), entry.getValue().createTag(context, pos));
         }
         tag.put("starts", startsTag);
@@ -348,7 +324,7 @@ public final class CubeSerializer {
         Registry<Structure> registry = context.registryAccess().lookupOrThrow(Registries.STRUCTURE);
         CompoundTag startsTag = tag.getCompoundOrEmpty("starts");
         for (String key : startsTag.keySet()) {
-            Structure structure = registry.getValue(ResourceLocation.tryParse(key));
+            Structure structure = registry.getValue(Identifier.tryParse(key));
             if (structure == null) {
                 LOGGER.error("Unknown structure start: {}", key);
                 continue;
@@ -366,7 +342,7 @@ public final class CubeSerializer {
         Registry<Structure> registry = registries.lookupOrThrow(Registries.STRUCTURE);
         CompoundTag referencesTag = tag.getCompoundOrEmpty("References");
         for (String key : referencesTag.keySet()) {
-            Structure structure = registry.getValue(ResourceLocation.tryParse(key));
+            Structure structure = registry.getValue(Identifier.tryParse(key));
             if (structure == null) {
                 LOGGER.warn("Found reference to unknown structure '{}' in a cube, discarding", key);
                 continue;

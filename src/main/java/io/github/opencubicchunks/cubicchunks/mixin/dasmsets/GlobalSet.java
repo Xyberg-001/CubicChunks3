@@ -37,7 +37,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  * contexts.
  */
 @RedirectSet
-public interface GlobalSet extends ForgeSet {
+public interface GlobalSet {
     @IntraOwnerContainer(@Ref(ChunkStatus.class))
     abstract class ChunkStatus_redirects {
         @MethodRedirect("generate(Ljava/util/concurrent/Executor;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkGenerator;"

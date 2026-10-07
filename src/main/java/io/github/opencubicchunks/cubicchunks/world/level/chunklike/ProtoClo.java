@@ -14,8 +14,8 @@ import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.chunk.CarvingMask;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
@@ -28,25 +28,25 @@ import net.minecraft.world.ticks.ProtoChunkTicks;
 
 public interface ProtoClo extends CloAccess {
     static ProtoClo create(
-            CloPos cloPos, UpgradeData upgradeData, LevelHeightAccessor levelHeightAccessor, Registry<Biome> biomeRegistry,
+            CloPos cloPos, UpgradeData upgradeData, LevelHeightAccessor levelHeightAccessor, PalettedContainerFactory containerFactory,
             @Nullable BlendingData blendingData
     ) {
         if (cloPos.isCube()) {
-            return new ProtoCube(cloPos.cubePos(), upgradeData, levelHeightAccessor, biomeRegistry, blendingData);
+            return new ProtoCube(cloPos.cubePos(), upgradeData, levelHeightAccessor, containerFactory, blendingData);
         } else {
-            return (ProtoClo) new ProtoChunk(cloPos.chunkPos(), upgradeData, levelHeightAccessor, biomeRegistry, blendingData);
+            return (ProtoClo) new ProtoChunk(cloPos.chunkPos(), upgradeData, levelHeightAccessor, containerFactory, blendingData);
         }
     }
 
     static ProtoClo create(
             CloPos cloPos, UpgradeData upgradeData, @Nullable LevelChunkSection[] sections, ProtoChunkTicks<Block> blockTicks,
-            ProtoChunkTicks<Fluid> liquidTicks, LevelHeightAccessor levelHeightAccessor, Registry<Biome> biomeRegistry,
+            ProtoChunkTicks<Fluid> liquidTicks, LevelHeightAccessor levelHeightAccessor, PalettedContainerFactory containerFactory,
             @Nullable BlendingData blendingData
     ) {
         if (cloPos.isCube()) {
-            return new ProtoCube(cloPos.cubePos(), upgradeData, sections, blockTicks, liquidTicks, levelHeightAccessor, biomeRegistry, blendingData);
+            return new ProtoCube(cloPos.cubePos(), upgradeData, sections, blockTicks, liquidTicks, levelHeightAccessor, containerFactory, blendingData);
         } else {
-            return (ProtoClo) new ProtoChunk(cloPos.chunkPos(), upgradeData, sections, blockTicks, liquidTicks, levelHeightAccessor, biomeRegistry,
+            return (ProtoClo) new ProtoChunk(cloPos.chunkPos(), upgradeData, sections, blockTicks, liquidTicks, levelHeightAccessor, containerFactory,
                     blendingData);
         }
     }
@@ -61,11 +61,8 @@ public interface ProtoClo extends CloAccess {
 
     Map<BlockPos, CompoundTag> getBlockEntityNbts();
 
-    @Nullable CarvingMask getCarvingMask();
 
-    CarvingMask getOrCreateCarvingMask();
 
-    void setCarvingMask(CarvingMask carvingMask);
 
     void setLightEngine(LevelLightEngine lightEngine);
 

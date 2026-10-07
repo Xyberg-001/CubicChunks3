@@ -42,7 +42,7 @@ import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.ticks.TickContainerAccess;
 
-public interface CloAccess extends BlockGetter, BiomeManager.NoiseBiomeSource, LightChunk, StructureAccess {
+public interface CloAccess extends BlockGetter, BiomeResolver, LightChunk, StructureAccess {
     GameEventListenerRegistry getListenerRegistry(int sectionY);
 
     @Nullable BlockState setBlockState(BlockPos pos, BlockState state);

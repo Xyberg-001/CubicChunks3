@@ -19,6 +19,8 @@ import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import net.minecraft.core.BlockPos;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import net.minecraft.world.DifficultyInstance;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerChunkCache;
@@ -111,4 +113,22 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
 
     // TODO: phase 2 - isPositionEntityTicking - mixin
 
+
+    /**
+     * Local difficulty from the cube at the position (vanilla reads the chunk's inhabited time); replaced whole, as in 1.21.6 where it was
+     * Level's. 26.3 moved it to ServerLevel, with the moon's brightness at the position and the overworld clock.
+     */
+    @Inject(method = "getCurrentDifficultyAt", at = @At(value = "HEAD"), cancellable = true)
+    private void cc_replaceGetCurrentDifficultyAt(BlockPos blockPos, CallbackInfoReturnable<DifficultyInstance> cir) {
+        if (cc_isCubic) {
+            ServerLevel self = (ServerLevel) (Object) this;
+            long inhabitedTime = 0L;
+            float moonBrightness = 0.0F;
+            if (this.cc_hasCubeAt(blockPos)) {
+                moonBrightness = self.getMoonBrightness(blockPos);
+                inhabitedTime = this.cc_getCubeAt(blockPos).getInhabitedTime();
+            }
+            cir.setReturnValue(new DifficultyInstance(self.getDifficulty(), self.getOverworldClockTime(), inhabitedTime, moonBrightness));
+        }
+    }
 }

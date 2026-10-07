@@ -54,7 +54,6 @@ import io.github.opencubicchunks.cubicchunks.util.StaticCache3D;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.CloAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.ImposterProtoClo;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
-import io.github.opencubicchunks.cubicchunks.movetoforgesourcesetlater.CCCommonHooks;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStep;
@@ -65,7 +64,7 @@ import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2LongMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import net.minecraft.ReportedException;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.level.ChunkGenerationTask;
@@ -158,7 +157,7 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
             // best approach is without making our own constructor
             cc_cloStatusListener = (cloPos, fullChunkStatus) -> {};
             ((MarkableAsCubic) distanceManager).cc_setCubic();
-            cc_cubeStorage = new CubeStorage(levelStorageAccess.getDimensionPath(level.dimension()), level.dimension().location().toString());
+            cc_cubeStorage = new CubeStorage(levelStorageAccess.getDimensionPath(level.dimension()), level.dimension().identifier().toString());
         }
     }
 
@@ -171,7 +170,7 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     private void cc_onClose(CallbackInfo ci) throws IOException {
         if (cc_cubeStorage != null) {
             cc_cubeStorage.close();
-            CubicChunks.LOGGER.info("Cubes in {}: {} loaded from disk, {} new, {} saves, {} unloaded", level.dimension().location(),
+            CubicChunks.LOGGER.info("Cubes in {}: {} loaded from disk, {} new, {} saves, {} unloaded", level.dimension().identifier(),
                     cc_cubesLoaded.get(), cc_cubesCreated.get(), cc_cubesSaved.get(), cc_cubesUnloaded.get());
         }
     }
@@ -376,7 +375,6 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
             if (!pendingUnloads.remove(cloPos, holder) || clo == null) {
                 return;
             }
-            CCCommonHooks.onCloUnload(poiManager, clo);
             chunkTypeCache.remove(cloPos);
             if (clo instanceof LevelCube cube) {
                 cube.setLoaded(false);
@@ -389,7 +387,6 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
                 cc_cubesUnloaded.incrementAndGet();
             } else if ((Object) clo instanceof LevelChunk column) {
                 column.setLoaded(false);
-                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new net.neoforged.neoforge.event.level.ChunkEvent.Unload(column));
                 level.unload(column);
             }
             cc_progressListener.cc_onStatusChange(CloPos.fromLong(cloPos), null);

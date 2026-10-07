@@ -28,9 +28,9 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.CarvingMask;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
@@ -49,25 +49,24 @@ public class ProtoCube extends CubeAccess implements ProtoClo {
     private volatile @Nullable LevelLightEngine lightEngine;
     private volatile ChunkStatus status;
     private final List<CompoundTag> entities;
-    private @Nullable CarvingMask carvingMask;
     private @Nullable BelowZeroRetrogen belowZeroRetrogen;
     private final ProtoChunkTicks<Block> blockTicks;
     private final ProtoChunkTicks<Fluid> fluidTicks;
 
     // Constructors mirroring vanilla signatures
     public ProtoCube(
-            CubePos cubePos, UpgradeData upgradeData, LevelHeightAccessor levelHeightAccessor, Registry<Biome> biomeRegistry,
+            CubePos cubePos, UpgradeData upgradeData, LevelHeightAccessor levelHeightAccessor, PalettedContainerFactory containerFactory,
             @Nullable BlendingData blendingData
     ) {
-        this(cubePos, upgradeData, null, new ProtoChunkTicks(), new ProtoChunkTicks(), levelHeightAccessor, biomeRegistry, blendingData);
+        this(cubePos, upgradeData, null, new ProtoChunkTicks(), new ProtoChunkTicks(), levelHeightAccessor, containerFactory, blendingData);
     }
 
     public ProtoCube(
             CubePos cubePos, UpgradeData upgradeData, @Nullable LevelChunkSection[] sections, ProtoChunkTicks<Block> blockTicks,
-            ProtoChunkTicks<Fluid> liquidTicks, LevelHeightAccessor levelHeightAccessor, Registry<Biome> biomeRegistry,
+            ProtoChunkTicks<Fluid> liquidTicks, LevelHeightAccessor levelHeightAccessor, PalettedContainerFactory containerFactory,
             @Nullable BlendingData blendingData
     ) {
-        super(cubePos, upgradeData, levelHeightAccessor, biomeRegistry, 0L, sections, blendingData);
+        super(cubePos, upgradeData, levelHeightAccessor, containerFactory, 0L, sections, blendingData);
         this.status = ChunkStatus.EMPTY;
         this.entities = Lists.newArrayList();
         this.blockTicks = blockTicks;
@@ -161,14 +160,8 @@ public class ProtoCube extends CubeAccess implements ProtoClo {
     @TransformFromMethod(value = "removeBlockEntity(Lnet/minecraft/core/BlockPos;)V", owner = @Ref(ProtoChunk.class))
     @Override public native void removeBlockEntity(BlockPos pos);
 
-    @TransformFromMethod(value = "getCarvingMask()Lnet/minecraft/world/level/chunk/CarvingMask;", owner = @Ref(ProtoChunk.class))
-    @Override public native @Nullable CarvingMask getCarvingMask();
 
-    @TransformFromMethod(value = "getOrCreateCarvingMask()Lnet/minecraft/world/level/chunk/CarvingMask;", owner = @Ref(ProtoChunk.class))
-    @Override public native CarvingMask getOrCreateCarvingMask();
 
-    @TransformFromMethod(value = "setCarvingMask(Lnet/minecraft/world/level/chunk/CarvingMask;)V", owner = @Ref(ProtoChunk.class))
-    @Override public native void setCarvingMask(CarvingMask carvingMask);
 
     @TransformFromMethod(value = "setLightEngine(Lnet/minecraft/world/level/lighting/LevelLightEngine;)V", owner = @Ref(ProtoChunk.class))
     @Override public native void setLightEngine(LevelLightEngine lightEngine);
