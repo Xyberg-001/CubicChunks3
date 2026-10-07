@@ -1,7 +1,5 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server;
 
-import java.util.function.Predicate;
-import java.util.stream.Stream;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -24,7 +22,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MinecraftServer.class)
@@ -86,13 +83,6 @@ public abstract class MixinMinecraftServer {
         int cubeDiameter = cubeRadius * 2 + 1;
         int chunkDiameter = cubeDiameter * CubicConstants.DIAMETER_IN_SECTIONS;
         return cubeDiameter * cubeDiameter * cubeDiameter + chunkDiameter * chunkDiameter;
-    }
-
-    // Temporary hack to let us unload a world without saving
-    // TODO (P2): saving
-    @Redirect(method = "stopServer", at = @At(value = "INVOKE", target = "Ljava/util/stream/Stream;anyMatch(Ljava/util/function/Predicate;)Z"))
-    private boolean cc_onStopServer_chunkMapHasWork(Stream instance, Predicate<?> predicate) {
-        return false;
     }
 
     // TODO P2 :: Forced cubes will need to be implemented here as well; but this includes saving logic so P2

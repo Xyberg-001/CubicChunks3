@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -47,17 +48,23 @@ import io.github.opencubicchunks.cubicchunks.server.level.CloTrackingView;
 import io.github.opencubicchunks.cubicchunks.server.level.CubeHolder;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicChunkMap;
 import io.github.opencubicchunks.cubicchunks.server.level.GeneratingCubeMap;
+import io.github.opencubicchunks.cubicchunks.server.level.GenerationCloHolder;
 import io.github.opencubicchunks.cubicchunks.server.level.progress.CloProgressListener;
 import io.github.opencubicchunks.cubicchunks.util.StaticCache3D;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.CloAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.ImposterProtoClo;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
+import io.github.opencubicchunks.cubicchunks.movetoforgesourcesetlater.CCCommonHooks;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
+import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStep;
 import io.github.opencubicchunks.cubicchunks.world.level.entity.CloStatusUpdateListener;
 import io.github.opencubicchunks.cubicchunks.world.storage.CubeSerializer;
 import io.github.opencubicchunks.cubicchunks.world.storage.CubeStorage;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
+import it.unimi.dsi.fastutil.longs.Long2LongMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.ReportedException;
 import net.minecraft.Util;
 import net.minecraft.nbt.CompoundTag;
@@ -66,10 +73,12 @@ import net.minecraft.server.level.ChunkGenerationTask;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ChunkResult;
+import net.minecraft.server.level.ChunkTaskDispatcher;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ThreadedLevelLightEngine;
 import net.minecraft.server.level.progress.ChunkProgressListener;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.util.thread.BlockableEventLoop;
@@ -77,6 +86,7 @@ import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.TicketStorage;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LightChunkGetter;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.chunk.status.ChunkType;
@@ -113,6 +123,10 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     @Shadow @Final private BlockableEventLoop<Runnable> mainThreadExecutor;
     @Shadow @Final private Long2ByteMap chunkTypeCache;
     @Shadow @Final private AtomicInteger activeChunkWrites;
+    @Shadow @Final private PoiManager poiManager;
+    @Shadow @Final private Long2ObjectLinkedOpenHashMap<ChunkHolder> pendingUnloads;
+    @Shadow @Final private Long2LongMap nextChunkSaveTime;
+    @Shadow @Final private Queue<Runnable> unloadQueue;
 
     @Shadow @Final private static CompletableFuture<ChunkResult<List<CloAccess>>> UNLOADED_CHUNK_LIST_FUTURE;
     @Shadow @Final private static ChunkResult<List<CloAccess>> UNLOADED_CHUNK_LIST_RESULT;
@@ -131,6 +145,7 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     private final AtomicInteger cc_cubesLoaded = new AtomicInteger();
     private final AtomicInteger cc_cubesCreated = new AtomicInteger();
     private final AtomicInteger cc_cubesSaved = new AtomicInteger();
+    private final AtomicInteger cc_cubesUnloaded = new AtomicInteger();
 
     // TODO once we can target non-return locations in constructors, do this when the vanilla field is set
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -150,6 +165,35 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
         }
     }
 
+    @Shadow @Final private Long2ObjectLinkedOpenHashMap<ChunkHolder> updatingChunkMap;
+    @Shadow @Final LongSet toDrop;
+    @Shadow @Final private ThreadedLevelLightEngine lightEngine;
+    @Shadow @Final private ChunkTaskDispatcher worldgenTaskDispatcher;
+    @Shadow @Final private ChunkTaskDispatcher lightTaskDispatcher;
+
+    /**
+     * In a cubic world, columns still loaded do not count as work: the server waits at shutdown until this is false, and once every cube
+     * has unloaded some columns are left at load levels 41-44 with no ticket or cube to hold them (column level propagation does not
+     * yet raise them past the unload level). Columns hold no blocks in a cubic world and are not saved, so nothing is lost by not
+     * waiting for them; cubes are still waited for, so each one is saved as it unloads.
+     */
+    @Inject(method = "hasWork", at = @At("RETURN"), cancellable = true)
+    private void cc_onHasWork(CallbackInfoReturnable<Boolean> cir) {
+        if (!cir.getReturnValueZ() || !((CanBeCubic) level).cc_isCubic()) {
+            return;
+        }
+        boolean cubesLoaded = false;
+        for (long pos : updatingChunkMap.keySet()) {
+            if (CloPos.isCube(pos)) {
+                cubesLoaded = true;
+                break;
+            }
+        }
+        cir.setReturnValue(cubesLoaded || lightEngine.hasLightWork() || !pendingUnloads.isEmpty() || poiManager.hasWork() || !toDrop.isEmpty()
+                || !unloadQueue.isEmpty() || worldgenTaskDispatcher.hasWork() || lightTaskDispatcher.hasWork() || distanceManager.hasTickets());
+    }
+
+
     @Override public void cc_markCubeUnsaved(CubePos cubePos) {
         cc_setCloUnsaved(CloPos.cube(cubePos));
     }
@@ -158,8 +202,8 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     private void cc_onClose(CallbackInfo ci) throws IOException {
         if (cc_cubeStorage != null) {
             cc_cubeStorage.close();
-            CubicChunks.LOGGER.info("Cubes in {}: {} loaded from disk, {} new, {} saves", level.dimension().location(), cc_cubesLoaded.get(),
-                    cc_cubesCreated.get(), cc_cubesSaved.get());
+            CubicChunks.LOGGER.info("Cubes in {}: {} loaded from disk, {} new, {} saves, {} unloaded", level.dimension().location(),
+                    cc_cubesLoaded.get(), cc_cubesCreated.get(), cc_cubesSaved.get(), cc_cubesUnloaded.get());
         }
     }
 
@@ -345,9 +389,47 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     @TransformFromMethod("saveChunksEagerly(Ljava/util/function/BooleanSupplier;)V")
     private native void cc_saveClosEagerly(BooleanSupplier hasMoreTime);
 
+    /**
+     * Unloads a cube or column once it has no ticket left: the cubic counterpart of vanilla's scheduleUnload, written out rather than
+     * copied. A cube is saved, then its block entities and ticks leave the level; a column is only released (in a cubic world it holds no
+     * blocks, and columns are not saved yet). Light is left alone: cubes have none yet. Runs from the unload queue, after any save
+     * already under way for it.
+     */
     @AddMethodToSets(containers = ChunkToCloSet.ChunkMap_redirects.class, method = "scheduleUnload(JLnet/minecraft/server/level/ChunkHolder;)V")
-    private void cc_scheduleUnload(long chunkPos, ChunkHolder chunkHolder) {
-        // TODO (P2) save/load
+    private void cc_scheduleUnload(long cloPos, ChunkHolder holder) {
+        CompletableFuture<?> saveSync = holder.getSaveSyncFuture();
+        saveSync.thenRunAsync(() -> {
+            if (holder.getSaveSyncFuture() != saveSync) {
+                cc_scheduleUnload(cloPos, holder);
+                return;
+            }
+            CloAccess clo = ((GenerationCloHolder) holder).cc_getLatestClo();
+            if (!pendingUnloads.remove(cloPos, holder) || clo == null) {
+                return;
+            }
+            CCCommonHooks.onCloUnload(poiManager, clo);
+            chunkTypeCache.remove(cloPos);
+            if (clo instanceof LevelCube cube) {
+                cube.setLoaded(false);
+                cc_save(cube);
+                cube.clearAllBlockEntities();
+                cube.unregisterTickContainerFromLevel(level);
+                cc_cubesUnloaded.incrementAndGet();
+            } else if (clo instanceof CubeAccess cube) {
+                cc_save(cube);
+                cc_cubesUnloaded.incrementAndGet();
+            } else if ((Object) clo instanceof LevelChunk column) {
+                column.setLoaded(false);
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new net.neoforged.neoforge.event.level.ChunkEvent.Unload(column));
+                level.unload(column);
+            }
+            cc_progressListener.cc_onStatusChange(CloPos.fromLong(cloPos), null);
+            nextChunkSaveTime.remove(cloPos);
+        }, unloadQueue::add).whenComplete((ignored, throwable) -> {
+            if (throwable != null) {
+                CubicChunks.LOGGER.error("Failed to unload {}", CloPos.fromLong(cloPos), throwable);
+            }
+        });
     }
 
     // region [cc_scheduleChunkLoad dasm + mixin]
