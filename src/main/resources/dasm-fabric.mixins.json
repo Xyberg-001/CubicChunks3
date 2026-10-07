@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.github.notstirred.dasm.mod.dummy.mixins",
+  "plugin": "io.github.opencubicchunks.cubicchunks.mixin.dasm.FabricDasmConfigPlugin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "Dummy1",
+    "IDummy",
+    "Dummy2"
+  ]
+}

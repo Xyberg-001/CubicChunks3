@@ -9,13 +9,12 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
-import net.neoforged.neoforge.network.handling.IPayloadHandler;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.player.Player;
 
 public record CCClientboundForgetLevelCloPacket(CloPos pos) implements CustomPacketPayload {
     public static final CustomPacketPayload.Type<CCClientboundForgetLevelCloPacket> TYPE = new CustomPacketPayload.Type<>(
-            ResourceLocation.fromNamespaceAndPath(CubicChunks.MODID, "forget_clo"));
+            Identifier.fromNamespaceAndPath(CubicChunks.MODID, "forget_clo"));
 
     public static final StreamCodec<ByteBuf, CCClientboundForgetLevelCloPacket> STREAM_CODEC = StreamCodec.composite(CLO_POS_STREAM_CODEC,
             CCClientboundForgetLevelCloPacket::pos, CCClientboundForgetLevelCloPacket::new);
@@ -24,9 +23,9 @@ public record CCClientboundForgetLevelCloPacket(CloPos pos) implements CustomPac
         return TYPE;
     }
 
-    public static class Handler implements IPayloadHandler<CCClientboundForgetLevelCloPacket> {
-        @Override public void handle(CCClientboundForgetLevelCloPacket payload, IPayloadContext context) {
-            var clientChunkCache = ((ClientChunkCache) context.player().level().getChunkSource());
+    public static class Handler implements CCPayloadHandler<CCClientboundForgetLevelCloPacket> {
+        @Override public void handle(CCClientboundForgetLevelCloPacket payload, Player player) {
+            var clientChunkCache = ((ClientChunkCache) player.level().getChunkSource());
             // TODO P2: queueLightRemoval - look at vanilla packet handler
             if (payload.pos.isChunk()) {
                 clientChunkCache.drop(payload.pos.chunkPos());

@@ -27,7 +27,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.PlayerChunkSender;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import org.spongepowered.asm.mixin.Dynamic;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -58,7 +58,7 @@ public class MixinPlayerChunkSender {
     @AddMethodToSets(containers = ChunkToCloSet.PlayerChunkSender_redirects.class, method = "dropChunk(Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/world/level/ChunkPos;)V")
     public void cc_dropClo(ServerPlayer player, CloPos cloPos) {
         if (!this.pendingChunks.remove(cloPos.toLong()) && player.isAlive()) {
-            PacketDistributor.sendToPlayer(player, new CCClientboundForgetLevelCloPacket(cloPos));
+            ServerPlayNetworking.send(player, new CCClientboundForgetLevelCloPacket(cloPos));
         }
     }
 
@@ -113,7 +113,7 @@ public class MixinPlayerChunkSender {
 
     @Unique
     private static void cc_sendCube(ServerGamePacketListenerImpl packetListener, ServerLevel level, LevelCube cube) {
-        PacketDistributor.sendToPlayer(packetListener.player, new CCClientboundLevelCubeWithLightPacket(cube));
+        ServerPlayNetworking.send(packetListener.player, new CCClientboundLevelCubeWithLightPacket(cube));
 
         // ChunkPos chunkpos = chunk.getPos();
 
@@ -126,7 +126,7 @@ public class MixinPlayerChunkSender {
 
     @Unique
     private static void cc_sendChunk(ServerGamePacketListenerImpl packetListener, ServerLevel level, LevelChunk chunk) {
-        PacketDistributor.sendToPlayer(packetListener.player, new CCClientboundLevelChunkPacket(chunk.getPos()));
+        ServerPlayNetworking.send(packetListener.player, new CCClientboundLevelChunkPacket(chunk.getPos()));
 
         // ChunkPos chunkpos = chunk.getPos();
 

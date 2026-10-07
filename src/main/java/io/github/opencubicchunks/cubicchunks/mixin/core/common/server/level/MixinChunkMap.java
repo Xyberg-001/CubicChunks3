@@ -92,7 +92,7 @@ import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import org.spongepowered.asm.mixin.Dynamic;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -718,7 +718,7 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     private void cc_onApplyChunkTrackingView_setChunkCacheCenterPacket(
             ServerGamePacketListenerImpl instance, Packet packet, ServerPlayer player, CloTrackingView cloTrackingView
     ) {
-        PacketDistributor.sendToPlayer(player,
+        ServerPlayNetworking.send(player,
                 new CCClientboundSetCubeCacheCenterPacket(((CloTrackingView.Positioned) cloTrackingView).center().cubePos()));
     }
     // endregion
