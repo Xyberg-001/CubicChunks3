@@ -44,6 +44,7 @@ import net.minecraft.world.level.block.entity.FuelValues;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ChunkSource;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
@@ -82,8 +83,14 @@ public class TestCubicLevel extends BaseTest {
                 int maxChainedNeighborUpdates
         ) {
             super(levelData, dimension, registryAccess, dimensionTypeRegistration, isClientSide, isDebug, biomeZoomSeed, maxChainedNeighborUpdates);
-            when(((CubeSource) mockChunkSource).cc_getCube(anyInt(), anyInt(), anyInt(), anyBoolean())).thenReturn(mock(LevelCube.class));
-            when(((CubeSource) mockChunkSource).cc_getCube(anyInt(), anyInt(), anyInt(), any(), anyBoolean())).thenReturn(mock(LevelCube.class));
+            // Deep stubs: a cubic level holds Y 0, so these tests reach the cube and column code (with the dimension type's height of 0,
+            // every position used to be outside the world and returned early)
+            when(((CubeSource) mockChunkSource).cc_getCube(anyInt(), anyInt(), anyInt(), anyBoolean()))
+                    .thenReturn(mock(LevelCube.class, RETURNS_DEEP_STUBS));
+            when(((CubeSource) mockChunkSource).cc_getCube(anyInt(), anyInt(), anyInt(), any(), anyBoolean()))
+                    .thenReturn(mock(LevelCube.class, RETURNS_DEEP_STUBS));
+            when(mockChunkSource.getChunk(anyInt(), anyInt(), any(ChunkStatus.class), anyBoolean()))
+                    .thenReturn(mock(LevelChunk.class, RETURNS_DEEP_STUBS));
         }
 
         @Override public void sendBlockUpdated(BlockPos pos, BlockState oldState, BlockState newState, int flags) {
