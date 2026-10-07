@@ -64,7 +64,6 @@ import io.github.opencubicchunks.cubicchunks.world.storage.CubeStorage;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2LongMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
-import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.ReportedException;
 import net.minecraft.Util;
 import net.minecraft.nbt.CompoundTag;
@@ -73,12 +72,10 @@ import net.minecraft.server.level.ChunkGenerationTask;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ChunkResult;
-import net.minecraft.server.level.ChunkTaskDispatcher;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.level.ThreadedLevelLightEngine;
 import net.minecraft.server.level.progress.ChunkProgressListener;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.util.thread.BlockableEventLoop;
@@ -163,34 +160,6 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
             ((MarkableAsCubic) distanceManager).cc_setCubic();
             cc_cubeStorage = new CubeStorage(levelStorageAccess.getDimensionPath(level.dimension()), level.dimension().location().toString());
         }
-    }
-
-    @Shadow @Final private Long2ObjectLinkedOpenHashMap<ChunkHolder> updatingChunkMap;
-    @Shadow @Final LongSet toDrop;
-    @Shadow @Final private ThreadedLevelLightEngine lightEngine;
-    @Shadow @Final private ChunkTaskDispatcher worldgenTaskDispatcher;
-    @Shadow @Final private ChunkTaskDispatcher lightTaskDispatcher;
-
-    /**
-     * In a cubic world, columns still loaded do not count as work: the server waits at shutdown until this is false, and once every cube
-     * has unloaded some columns are left at load levels 41-44 with no ticket or cube to hold them (column level propagation does not
-     * yet raise them past the unload level). Columns hold no blocks in a cubic world and are not saved, so nothing is lost by not
-     * waiting for them; cubes are still waited for, so each one is saved as it unloads.
-     */
-    @Inject(method = "hasWork", at = @At("RETURN"), cancellable = true)
-    private void cc_onHasWork(CallbackInfoReturnable<Boolean> cir) {
-        if (!cir.getReturnValueZ() || !((CanBeCubic) level).cc_isCubic()) {
-            return;
-        }
-        boolean cubesLoaded = false;
-        for (long pos : updatingChunkMap.keySet()) {
-            if (CloPos.isCube(pos)) {
-                cubesLoaded = true;
-                break;
-            }
-        }
-        cir.setReturnValue(cubesLoaded || lightEngine.hasLightWork() || !pendingUnloads.isEmpty() || poiManager.hasWork() || !toDrop.isEmpty()
-                || !unloadQueue.isEmpty() || worldgenTaskDispatcher.hasWork() || lightTaskDispatcher.hasWork() || distanceManager.hasTickets());
     }
 
 

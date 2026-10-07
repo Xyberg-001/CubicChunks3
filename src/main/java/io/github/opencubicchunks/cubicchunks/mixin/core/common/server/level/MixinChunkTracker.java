@@ -61,6 +61,26 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
         return ChunkPos.INVALID_CHUNK_POS;
     }
 
+    /**
+     * The highest level a cube can hold in this tracker; above it a cube counts as having none ({@code levelCount - 1}). Every level by
+     * default; the loading tracker lowers it to the cube load limit (see {@link MixinLoadingChunkTracker}).
+     */
+    protected int cc_maxCubeLevel() {
+        return levelCount - 1;
+    }
+
+    /**
+     * A cube never gets a level above {@link #cc_maxCubeLevel}. In the loading tracker cubes load only up to the cube load limit, below the
+     * column one, and a cube's level there is read back from its holder: a cube given a level between the two had none (so read back as
+     * unloaded) yet held up the columns beneath it, and when its ticket went the tracker saw no change, so those columns never unloaded.
+     */
+    @Inject(method = "computeLevelFromNeighbor", at = @At("RETURN"), cancellable = true)
+    private void cc_capCubeLevel(long startPos, long endPos, int startLevel, CallbackInfoReturnable<Integer> cir) {
+        if (cc_isCubic && CloPos.isCube(endPos) && cir.getReturnValueI() > cc_maxCubeLevel()) {
+            cir.setReturnValue(levelCount - 1);
+        }
+    }
+
     @ModifyConstant(method = "computeLevelFromNeighbor", constant = @Constant(intValue = 1))
     private int cc_dontIncrementLevelOnCubeChunkEdge(
             int constant, @Local(ordinal = 0, argsOnly = true) long startPos, @Local(ordinal = 1, argsOnly = true) long endPos
