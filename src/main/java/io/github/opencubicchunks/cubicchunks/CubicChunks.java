@@ -28,6 +28,10 @@ public class CubicChunks extends CubicChunksBase {
 
     public CubicChunks(IEventBus modEventBus) {
         ChunkMap.class.getName();
+        LOGGER.info("Block positions packed as {} bits of x and z and {} of Y: cubic worlds reach Y {}..{}, x and z +-{}",
+                net.minecraft.core.BlockPos.PACKED_HORIZONTAL_LENGTH, net.minecraft.core.BlockPos.PACKED_Y_LENGTH,
+                io.github.opencubicchunks.cubicchunks.world.level.CubicHeight.minY(), io.github.opencubicchunks.cubicchunks.world.level.CubicHeight.maxY(),
+                io.github.opencubicchunks.cubicchunks.world.level.CubicHeight.horizontalLimit());
 //        if (!(CubeMap.class.isAssignableFrom(ChunkMap.class))) {
 //            throw new IllegalStateException("Mixin not applied!");
 //        }

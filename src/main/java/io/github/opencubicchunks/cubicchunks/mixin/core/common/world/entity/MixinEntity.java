@@ -13,6 +13,7 @@ import io.github.opencubicchunks.cubicchunks.CanBeCubic;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.world.entity.EntityCubePosGetter;
+import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicLevelReader;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
@@ -24,6 +25,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -44,6 +46,12 @@ public abstract class MixinEntity implements EntityCubePosGetter {
     @Shadow public abstract AABB getBoundingBox();
 
     @Shadow public abstract int getId();
+
+    /** In a cubic world the void starts below its floor (CubicHeight.minY), not the dimension type's: nothing above it falls out. */
+    @Redirect(method = "checkBelowWorld", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;getMinY()I"))
+    private int cc_belowWorldFloor(Level level) {
+        return ((CanBeCubic) level).cc_isCubic() ? CubicHeight.minY() : level.getMinY();
+    }
 
     @AddFieldToSets(containers = ChunkToCubeSet.Entity_redirects.class, field = "chunkPosition:Lnet/minecraft/world/level/ChunkPos;")
     private CubePos cc_cubePosition = CubePos.of(0, 0, 0);

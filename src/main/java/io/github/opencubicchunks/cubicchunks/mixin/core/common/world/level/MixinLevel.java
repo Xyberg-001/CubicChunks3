@@ -17,6 +17,7 @@ import io.github.opencubicchunks.cubicchunks.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.MarkableAsCubic;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
+import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicLevel;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
@@ -38,7 +39,9 @@ import net.minecraft.world.level.material.FluidState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -57,6 +60,28 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
 
     @Override public boolean cc_isCubic() {
         return cc_isCubic;
+    }
+
+    /**
+     * A cubic world holds blocks from {@link CubicHeight#minY} to {@link CubicHeight#maxY}, whatever its dimension type says (its columns
+     * keep the dimension's height for what they still size by it); other worlds as vanilla.
+     */
+    @Override public boolean isOutsideBuildHeight(int y) {
+        if (cc_isCubic) {
+            return y < CubicHeight.minY() || y > CubicHeight.maxY();
+        }
+        return y < this.getMinY() || y > this.getMaxY();
+    }
+
+    /** Horizontal bounds shrink to what a packed block position holds (see MixinBlockPos), in every world. */
+    @ModifyConstant(method = "isInWorldBoundsHorizontal", constant = @Constant(intValue = 30000000))
+    private static int cc_horizontalBound(int bound) {
+        return CubicHeight.horizontalLimit();
+    }
+
+    @ModifyConstant(method = "isInWorldBoundsHorizontal", constant = @Constant(intValue = -30000000))
+    private static int cc_horizontalBoundNegative(int bound) {
+        return -CubicHeight.horizontalLimit();
     }
 
     public LevelCube cc_getCubeAt(BlockPos blockPos) {
