@@ -79,7 +79,7 @@ public interface ChunkToCloSet extends GlobalSet {
         native long toLong();
 
         // Note that this relies on ChunkPos and CloPos encoding to longs in the same way
-        @ConstructorToFactoryRedirect("<init>(J)V")
+        @MethodRedirect("unpack(J)Lnet/minecraft/world/level/ChunkPos;")
         static native CloPos fromLong(long cloPos);
 
         @ConstructorToFactoryRedirect("<init>(II)V")

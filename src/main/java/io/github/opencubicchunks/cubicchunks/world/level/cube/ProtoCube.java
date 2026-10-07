@@ -145,8 +145,8 @@ public class ProtoCube extends CubeAccess implements ProtoClo {
     public static native BlockPos unpackOffsetCoordinates(short packedPos, int yOffset, ChunkPos chunkPos);
 
     // dasm + mixin
-    @TransformFromMethod(value = "markPosForPostprocessing(Lnet/minecraft/core/BlockPos;)V", owner = @Ref(ProtoChunk.class))
-    @Override public native void markPosForPostprocessing(BlockPos pos);
+    @TransformFromMethod(value = "markPosForPostProcessing(Lnet/minecraft/core/BlockPos;)V", owner = @Ref(ProtoChunk.class))
+    @Override public native void markPosForPostProcessing(BlockPos pos);
 
     @TransformFromMethod(value = "addPackedPostProcess(Lit/unimi/dsi/fastutil/shorts/ShortList;I)V", owner = @Ref(ProtoChunk.class))
     @Override public native void addPackedPostProcess(ShortList offsets, int index);

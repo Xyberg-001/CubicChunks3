@@ -1,31 +1,17 @@
 package io.github.opencubicchunks.cubicchunks.mixin.dasmsets;
 
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.function.Function;
 
-import javax.annotation.Nullable;
 
-import io.github.notstirred.dasm.api.annotations.redirect.redirects.MethodRedirect;
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.TypeRedirect;
 import io.github.notstirred.dasm.api.annotations.redirect.sets.IntraOwnerContainer;
 import io.github.notstirred.dasm.api.annotations.redirect.sets.RedirectSet;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
-import io.github.opencubicchunks.cc_core.world.level.CloPos;
 import io.github.opencubicchunks.cubicchunks.server.level.CloTrackingView;
-import io.github.opencubicchunks.cubicchunks.world.level.chunklike.CloAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.entity.CloStatusUpdateListener;
 import net.minecraft.server.level.ChunkMap;
-import net.minecraft.server.level.ChunkResult;
 import net.minecraft.server.level.ChunkTrackingView;
 import net.minecraft.server.level.ServerChunkCache;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ThreadedLevelLightEngine;
-import net.minecraft.world.level.chunk.ChunkGenerator;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.entity.ChunkStatusUpdateListener;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 
 /**
  * Contains redirects that are applied to all DASM transforms. <br/>
@@ -35,18 +21,6 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  */
 @RedirectSet
 public interface GlobalSet {
-    @IntraOwnerContainer(@Ref(ChunkStatus.class))
-    abstract class ChunkStatus_redirects {
-        @MethodRedirect("generate(Ljava/util/concurrent/Executor;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkGenerator;"
-                + "Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager;"
-                + "Lnet/minecraft/server/level/ThreadedLevelLightEngine;Ljava/util/function/Function;Ljava/util/List;)"
-                + "Ljava/util/concurrent/CompletableFuture;")
-        public abstract CompletableFuture<ChunkResult<CloAccess>> cc_generate(
-                Executor exectutor, ServerLevel level, ChunkGenerator chunkGenerator, StructureTemplateManager structureTemplateManager,
-                ThreadedLevelLightEngine lightEngine, Function<CloAccess, CompletableFuture<ChunkResult<CloAccess>>> task, List<CloAccess> cache
-        );
-    }
-
     @TypeRedirect(from = @Ref(ChunkStatusUpdateListener.class), to = @Ref(CloStatusUpdateListener.class))
     interface ChunkStatusUpdateListener_to_CloStatusUpdateListener_redirects {}
 

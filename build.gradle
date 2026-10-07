@@ -66,6 +66,11 @@ mixinGen {
         it.conformVisibility = true
         it.injectorsDefaultRequire = 1
     }
+    config(sourceSets.test, "test") {
+        it.required = true
+        it.conformVisibility = true
+        it.injectorsDefaultRequire = 1
+    }
 }
 
 java {
@@ -112,9 +117,10 @@ dependencies {
         transitive = false
     }
 
-    // dasm (MIT): the transformer, and its loader-independent mixin glue (BaseConfigPlugin, DasmExtension), which ships in the NeoForge
-    // artifact; the Fabric plugin on top of it is ours (mixin/dasm/FabricDasmConfigPlugin)
-    implementation(include("io.github.notstirred:dasm:3.2.0"))
+    // dasm (MIT): the NeoForge artifact carries the transformer (shaded) and the loader-independent mixin glue (DasmExtension,
+    // DasmService); only it goes in, as a second copy of the transformer clashes with its shaded one. The Fabric plugin on top of it is
+    // ours (mixin/dasm/FabricDasmConfigPlugin); the annotations are only needed to compile.
+    compileOnly("io.github.notstirred:dasm:3.2.0:api")
     implementation(include("io.github.notstirred:dasm-neoforge:3.2.0")) {
         transitive = false
     }
@@ -135,9 +141,9 @@ processResources {
     }
 }
 
-// Tests ran on NeoForge's test framework; they come back once the mod builds on Fabric
-sourceSets.test.java.srcDirs = []
-sourceSets.test.resources.srcDirs = []
+// The tests in src/test ran on NeoForge's test framework; ported ones go in src/test-fabric
+sourceSets.test.java.srcDirs = ['src/test-fabric/java']
+sourceSets.test.resources.srcDirs = ['src/test-fabric/resources']
 
 processResources.dependsOn(genAll, "CubicChunksCore:assemble")
 compileJava.dependsOn("CubicChunksCore:assemble")

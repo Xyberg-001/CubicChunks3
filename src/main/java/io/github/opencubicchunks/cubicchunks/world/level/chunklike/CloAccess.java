@@ -97,7 +97,7 @@ public interface CloAccess extends BlockGetter, BiomeResolver, LightChunk, Struc
 
     void removeBlockEntity(BlockPos pos);
 
-    void markPosForPostprocessing(BlockPos pos);
+    void markPosForPostProcessing(BlockPos pos);
 
     ShortList[] getPostProcessing();
 
@@ -131,7 +131,7 @@ public interface CloAccess extends BlockGetter, BiomeResolver, LightChunk, Struc
 
     long getInhabitedTime();
 
-    void incrementInhabitedTime(long amount);
+    void incrementInhabitedTime();
 
     void setInhabitedTime(long inhabitedTime);
 
@@ -145,8 +145,6 @@ public interface CloAccess extends BlockGetter, BiomeResolver, LightChunk, Struc
     BiomeGenerationSettings carverBiome(Supplier<BiomeGenerationSettings> carverBiomeSettingsProvider);
 
     void fillBiomesFromNoise(BiomeResolver resolver, Climate.Sampler sampler);
-
-    boolean hasAnyStructureReferences();
 
     @Nullable BelowZeroRetrogen getBelowZeroRetrogen();
 

@@ -97,8 +97,6 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
 
     @Shadow @Final public ChunkMap chunkMap;
 
-    @Shadow private long lastInhabitedUpdate;
-
     @Shadow private @Nullable NaturalSpawner.SpawnState lastSpawnState;
 
     @Shadow protected abstract void getFullChunk(long chunkPos, Consumer<LevelChunk> fullChunkGetter);
@@ -242,20 +240,20 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
     }
 
     @AddTransformToSets(GlobalSet.ServerChunkCache_redirects.class)
-    @TransformFromMethod(useRedirectSets = ChunkToCloSet.class, value = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;J)V")
-    private native void cc_tickClos(ProfilerFiller profiler, long timeInhabited);
+    @TransformFromMethod(useRedirectSets = ChunkToCloSet.class, value = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;)V")
+    private native void cc_tickClos(ProfilerFiller profiler);
 
-    @Inject(method = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;J)V", at = @At("HEAD"), cancellable = true)
-    private void cc_onVanillaTickChunks(ProfilerFiller profiler, long timeInhabited, CallbackInfo ci) {
+    @Inject(method = "tickChunks(Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("HEAD"), cancellable = true)
+    private void cc_onVanillaTickChunks(ProfilerFiller profiler, CallbackInfo ci) {
         if (cc_isCubic) {
             ci.cancel();
-            cc_tickClos(profiler, timeInhabited);
+            cc_tickClos(profiler);
         }
     }
 
-    @AddMethodToSets(containers = ChunkToCloSet.ServerChunkCache_redirects.class, method = "tickSpawningChunk(Lnet/minecraft/world/level/chunk/LevelChunk;JLjava/util/List;"
+    @AddMethodToSets(containers = ChunkToCloSet.ServerChunkCache_redirects.class, method = "tickSpawningChunk(Lnet/minecraft/world/level/chunk/LevelChunk;Ljava/util/List;"
             + "Lnet/minecraft/world/level/NaturalSpawner$SpawnState;)V")
-    private void cc_tickSpawningClo(LevelClo levelClo, long timeInhabited, List<MobCategory> spawnCategories, NaturalSpawner.SpawnState spawnState) {
+    private void cc_tickSpawningClo(LevelClo levelClo, List<MobCategory> spawnCategories, NaturalSpawner.SpawnState spawnState) {
         // TODO (P2)
     }
 
@@ -319,7 +317,7 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
         cc_removeTicketWithRadius(ticket, CloPos.cube(cubePos), radius);
     }
 
-    @AddMethodToSets(containers = ChunkToCubeSet.ServerChunkCache_redirects.class, method = "updateChunkForced(Lnet/minecraft/world/level/ChunkPos;Z)Z\"")
+    @AddMethodToSets(containers = ChunkToCubeSet.ServerChunkCache_redirects.class, method = "updateChunkForced(Lnet/minecraft/world/level/ChunkPos;Z)Z")
     @Override public boolean cc_updateCubeForced(CubePos cubePos, boolean forced) {
         return cc_updateCloForced(CloPos.cube(cubePos), forced);
     }

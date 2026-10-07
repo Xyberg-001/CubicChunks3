@@ -13,7 +13,7 @@ public abstract class MixinProtoCube {
     /**
      * Redirect to use cube section indexing instead of chunk section indexing
      */
-    @Dynamic @Redirect(method = { "markPosForPostprocessing", "getBlockState",
+    @Dynamic @Redirect(method = { "markPosForPostProcessing", "getBlockState",
         "getFluidState" }, at = @At(value = "INVOKE", target = "Lio/github/opencubicchunks/cubicchunks"
                 + "/world/level/cube/ProtoCube;getSectionIndex(I)I"))
     private int cc_onGetBlockState_SectionIndex(ProtoCube instance, int i, BlockPos pos) {

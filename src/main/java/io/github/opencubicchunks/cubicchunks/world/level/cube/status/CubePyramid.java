@@ -26,6 +26,9 @@ public record CubePyramid(ImmutableList<CubeStep> steps) {
     public static CubePyramid CC_GENERATION_PYRAMID_CUBES;
     @AddFieldToSets(containers = ChunkToCubeSet.ChunkPyramid_to_CubePyramid_redirects.class, field = "LOADING_PYRAMID:Lnet/minecraft/world/level/chunk/status/ChunkPyramid;")
     public static CubePyramid CC_LOADING_PYRAMID_CUBES;
+    // 26.3's ChunkPyramid.<clinit> also sets these; the copy writes them here, so they cannot be final
+    private static int SAFETY_MARGIN_CHUNKS;
+    public static int MAX_CHUNK_COORDINATE_VALUE;
 
     @TransformFromMethod(useRedirectSets = ChunkToCubeSet.class, owner = @Ref(ChunkPyramid.class), value = "<clinit>")
     static void initCubePyramids() {

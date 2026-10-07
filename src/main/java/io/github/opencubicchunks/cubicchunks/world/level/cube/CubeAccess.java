@@ -73,7 +73,7 @@ public abstract class CubeAccess implements CloAccess {
     protected final Map<Heightmap.Types, Heightmap> heightmaps = Maps.newEnumMap(Heightmap.Types.class);
     protected ChunkSkyLightSources skyLightSources;
     private final Map<Structure, StructureStart> structureStarts = Maps.newHashMap();
-    private final Map<Structure, LongSet> structuresRefences = Maps.newHashMap();
+    private final Map<Structure, LongSet> structureReferences = Maps.newHashMap();
     protected final Map<BlockPos, CompoundTag> pendingBlockEntities = Maps.newHashMap();
     protected final Map<BlockPos, BlockEntity> blockEntities = new Object2ObjectOpenHashMap<>();
     protected final LevelHeightAccessor levelHeightAccessor;
@@ -227,8 +227,8 @@ public abstract class CubeAccess implements CloAccess {
 
     @Override public abstract void removeBlockEntity(BlockPos pos);
 
-    @TransformFromMethod(value = "markPosForPostprocessing(Lnet/minecraft/core/BlockPos;)V", owner = @Ref(ChunkAccess.class))
-    @Override public native void markPosForPostprocessing(BlockPos pos);
+    @TransformFromMethod(value = "markPosForPostProcessing(Lnet/minecraft/core/BlockPos;)V", owner = @Ref(ChunkAccess.class))
+    @Override public native void markPosForPostProcessing(BlockPos pos);
 
     @TransformFromMethod(value = "getPostProcessing()[Lit/unimi/dsi/fastutil/shorts/ShortList;", owner = @Ref(ChunkAccess.class))
     @Override public native ShortList[] getPostProcessing();
@@ -300,8 +300,8 @@ public abstract class CubeAccess implements CloAccess {
     @TransformFromMethod(value = "getInhabitedTime()J", owner = @Ref(ChunkAccess.class))
     @Override public native long getInhabitedTime();
 
-    @TransformFromMethod(value = "incrementInhabitedTime(J)V", owner = @Ref(ChunkAccess.class))
-    @Override public native void incrementInhabitedTime(long amount);
+    @TransformFromMethod(value = "incrementInhabitedTime()V", owner = @Ref(ChunkAccess.class))
+    @Override public native void incrementInhabitedTime();
 
     @TransformFromMethod(value = "setInhabitedTime(J)V", owner = @Ref(ChunkAccess.class))
     @Override public native void setInhabitedTime(long inhabitedTime);
@@ -340,9 +340,6 @@ public abstract class CubeAccess implements CloAccess {
     @Override public void fillBiomesFromNoise(BiomeResolver resolver, Climate.Sampler sampler) {
         throw new UnsupportedOperationException(); // TODO P3
     }
-
-    @TransformFromMethod(value = "hasAnyStructureReferences()Z", owner = @Ref(ChunkAccess.class))
-    @Override public native boolean hasAnyStructureReferences();
 
     @Override public @Nullable BelowZeroRetrogen getBelowZeroRetrogen() {
         return null; // No below-zero retrogen in cubic worlds :)

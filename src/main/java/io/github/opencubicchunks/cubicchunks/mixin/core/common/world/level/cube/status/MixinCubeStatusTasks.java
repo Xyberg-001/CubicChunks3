@@ -19,7 +19,7 @@ public class MixinCubeStatusTasks {
         return instance.get(x, cubePos.getY(), z);
     }
 
-    @Dynamic @Redirect(method = "dasm$redirect$lambda$full$2", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/status/WorldGenContext;unsavedListener()Lio/github/opencubicchunks/cubicchunks/world/level/cube/LevelCube$UnsavedListener;"))
+    @Dynamic @Redirect(method = "dasm$redirect$lambda$full$0", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/status/WorldGenContext;unsavedListener()Lio/github/opencubicchunks/cubicchunks/world/level/cube/LevelCube$UnsavedListener;"))
     private static LevelCube.UnsavedListener onFullCube_worldGenContext_unsavedListener(WorldGenContext instance) {
         // TODO (P2) save/load: until WorldGenContext has a proper redirect giving a cube unsaved listener, go straight to the chunk map
         return cubePos -> ((CubicChunkMap) instance.level().getChunkSource().chunkMap).cc_markCubeUnsaved(cubePos);

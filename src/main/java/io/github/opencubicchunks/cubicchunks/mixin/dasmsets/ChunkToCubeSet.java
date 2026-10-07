@@ -33,6 +33,7 @@ import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SectionOcclusionGraph;
 import net.minecraft.client.renderer.chunk.SectionCopy;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ChunkGenerationTask;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkLevel;
@@ -89,6 +90,12 @@ public interface ChunkToCubeSet extends GlobalSet {
 
         @MethodRedirect("pack(II)J")
         static native long dummy_chunkAsLong(int x, int z);
+
+        @MethodRedirect("unpack(J)Lnet/minecraft/world/level/ChunkPos;")
+        static native CubePos from(long cubePos);
+
+        @MethodRedirect("pack(Lnet/minecraft/core/BlockPos;)J")
+        static native long asLong(BlockPos pos);
     }
 
     @TypeRedirect(from = @Ref(ChunkAccess.class), to = @Ref(CubeAccess.class))

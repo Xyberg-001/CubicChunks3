@@ -60,33 +60,13 @@ public class MixinChunkStatusTasks {
         }
     }
 
-    @Inject(method = "generateNoise", at = @At("HEAD"), cancellable = true)
-    private static void cc_generateNoise(
+    @Inject(method = "buildTerrain", at = @At("HEAD"), cancellable = true)
+    private static void cc_buildTerrain(
             WorldGenContext worldGenContext, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk,
             CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir
     ) {
         if (((CanBeCubic) worldGenContext.level()).cc_isCubic()) {
-            cir.setReturnValue(CCChunkStatusTasks.generateNoise(worldGenContext, step, cache, chunk));
-        }
-    }
-
-    @Inject(method = "generateSurface", at = @At("HEAD"), cancellable = true)
-    private static void cc_generateSurface(
-            WorldGenContext worldGenContext, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk,
-            CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir
-    ) {
-        if (((CanBeCubic) worldGenContext.level()).cc_isCubic()) {
-            cir.setReturnValue(CCChunkStatusTasks.generateSurface(worldGenContext, step, cache, chunk));
-        }
-    }
-
-    @Inject(method = "generateCarvers", at = @At("HEAD"), cancellable = true)
-    private static void cc_generateCarvers(
-            WorldGenContext worldGenContext, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk,
-            CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir
-    ) {
-        if (((CanBeCubic) worldGenContext.level()).cc_isCubic()) {
-            cir.setReturnValue(CCChunkStatusTasks.generateCarvers(worldGenContext, step, cache, chunk));
+            cir.setReturnValue(CCChunkStatusTasks.buildTerrain(worldGenContext, step, cache, chunk));
         }
     }
 

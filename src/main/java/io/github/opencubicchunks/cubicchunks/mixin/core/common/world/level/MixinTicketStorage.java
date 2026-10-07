@@ -36,9 +36,4 @@ public class MixinTicketStorage implements CubicTicketStorage {
     @AddTransformToSets(ChunkToCloSet.TicketStorage_redirects.class)
     @TransformFromMethod(owner = @Ref(TicketStorage.class), value = "updateChunkForced(Lnet/minecraft/world/level/ChunkPos;Z)Z")
     public native boolean cc_updateChunkForced(CloPos cloPos, boolean add);
-
-    // TODO move to neoforge-specific mixin
-    @AddTransformToSets(ChunkToCloSet.TicketStorage_redirects.class)
-    @TransformFromMethod(owner = @Ref(TicketStorage.class), value = "shouldForceNaturalSpawning(Lnet/minecraft/world/level/ChunkPos;)Z")
-    public native boolean cc_shouldForceNaturalSpawning(CloPos cloPos);
 }

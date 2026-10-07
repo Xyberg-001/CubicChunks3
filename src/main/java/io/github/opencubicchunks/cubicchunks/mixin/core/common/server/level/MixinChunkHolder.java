@@ -153,7 +153,7 @@ public abstract class MixinChunkHolder extends MixinGenerationChunkHolder implem
         }
     }
 
-    @WrapOperation(method = { "lambda$scheduleFullChunkPromotion$4",
+    @WrapOperation(method = { "lambda$scheduleFullChunkPromotion$0",
         "demoteFullChunk" }, at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ChunkMap;onFullChunkStatusChange(Lnet/minecraft/world/level/ChunkPos;"
                 + "Lnet/minecraft/server/level/FullChunkStatus;)V"))
     private void cc_onCallChunkMapOnFullChunkStatusChange(

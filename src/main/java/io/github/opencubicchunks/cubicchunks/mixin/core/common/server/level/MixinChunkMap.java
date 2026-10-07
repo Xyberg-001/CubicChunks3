@@ -75,6 +75,7 @@ import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.util.debug.LevelDebugSynchronizers;
 import net.minecraft.util.thread.BlockableEventLoop;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.level.ChunkPos;
@@ -524,6 +525,15 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     @AddTransformToSets(ChunkToCloSet.ChunkMap_redirects.class)
     @TransformFromMethod("onChunkReadyToSend(Lnet/minecraft/server/level/ChunkHolder;Lnet/minecraft/world/level/chunk/LevelChunk;)V")
     private native void cc_onChunkReadyToSend(ChunkHolder chunkholder, LevelClo cloPos);
+
+    // 26.3 registers a ready chunk's debug values (debug subscriptions, sent to clients that ask for them); cubes have none yet
+    @Dynamic @Redirect(method = "cc_onChunkReadyToSend", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/util/debug/LevelDebugSynchronizers;registerChunk(Lio/github/opencubicchunks/cubicchunks/world/level/chunklike/LevelClo;)V"))
+    private void cc_registerCloDebugValues(LevelDebugSynchronizers synchronizers, LevelClo clo) {
+        if (clo instanceof LevelChunk chunk) {
+            synchronizers.registerChunk(chunk);
+        }
+    }
 
     @AddTransformToSets(ChunkToCloSet.ChunkMap_redirects.class)
     @TransformFromMethod("prepareAccessibleChunk(Lnet/minecraft/server/level/ChunkHolder;)Ljava/util/concurrent/CompletableFuture;")
