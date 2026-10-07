@@ -1,11 +1,13 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -30,6 +32,7 @@ import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cc_core.world.level.CloPos;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
+import io.github.opencubicchunks.cubicchunks.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.MarkableAsCubic;
 import io.github.opencubicchunks.cubicchunks.mixin.core.common.world.level.chunk.storage.MixinChunkStorage;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
@@ -47,10 +50,14 @@ import io.github.opencubicchunks.cubicchunks.server.level.GeneratingCubeMap;
 import io.github.opencubicchunks.cubicchunks.server.level.progress.CloProgressListener;
 import io.github.opencubicchunks.cubicchunks.util.StaticCache3D;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.CloAccess;
+import io.github.opencubicchunks.cubicchunks.world.level.chunklike.ImposterProtoClo;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStep;
 import io.github.opencubicchunks.cubicchunks.world.level.entity.CloStatusUpdateListener;
+import io.github.opencubicchunks.cubicchunks.world.storage.CubeSerializer;
+import io.github.opencubicchunks.cubicchunks.world.storage.CubeStorage;
+import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import net.minecraft.ReportedException;
 import net.minecraft.Util;
 import net.minecraft.nbt.CompoundTag;
@@ -74,6 +81,7 @@ import net.minecraft.world.level.chunk.LightChunkGetter;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.chunk.status.ChunkType;
 import net.minecraft.world.level.entity.ChunkStatusUpdateListener;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.phys.Vec3;
@@ -102,6 +110,9 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
 
     @Shadow @Final ServerLevel level;
     @Shadow @Final private ChunkMap.DistanceManager distanceManager;
+    @Shadow @Final private BlockableEventLoop<Runnable> mainThreadExecutor;
+    @Shadow @Final private Long2ByteMap chunkTypeCache;
+    @Shadow @Final private AtomicInteger activeChunkWrites;
 
     @Shadow @Final private static CompletableFuture<ChunkResult<List<CloAccess>>> UNLOADED_CHUNK_LIST_FUTURE;
     @Shadow @Final private static ChunkResult<List<CloAccess>> UNLOADED_CHUNK_LIST_RESULT;
@@ -115,6 +126,11 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     private CloProgressListener cc_progressListener;
     @AddFieldToSets(containers = ChunkToCloSet.ChunkMap_redirects.class, field = "chunkStatusListener:Lnet/minecraft/world/level/entity/ChunkStatusUpdateListener;")
     private CloStatusUpdateListener cc_cloStatusListener;
+    /** Where this dimension's cubes are saved; null in a world that is not cubic. */
+    private @Nullable CubeStorage cc_cubeStorage;
+    private final AtomicInteger cc_cubesLoaded = new AtomicInteger();
+    private final AtomicInteger cc_cubesCreated = new AtomicInteger();
+    private final AtomicInteger cc_cubesSaved = new AtomicInteger();
 
     // TODO once we can target non-return locations in constructors, do this when the vanilla field is set
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -130,6 +146,20 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
             // best approach is without making our own constructor
             cc_cloStatusListener = (cloPos, fullChunkStatus) -> {};
             ((MarkableAsCubic) distanceManager).cc_setCubic();
+            cc_cubeStorage = new CubeStorage(levelStorageAccess.getDimensionPath(level.dimension()), level.dimension().location().toString());
+        }
+    }
+
+    @Override public void cc_markCubeUnsaved(CubePos cubePos) {
+        cc_setCloUnsaved(CloPos.cube(cubePos));
+    }
+
+    @Inject(method = "close", at = @At("HEAD"))
+    private void cc_onClose(CallbackInfo ci) throws IOException {
+        if (cc_cubeStorage != null) {
+            cc_cubeStorage.close();
+            CubicChunks.LOGGER.info("Cubes in {}: {} loaded from disk, {} new, {} saves", level.dimension().location(), cc_cubesLoaded.get(),
+                    cc_cubesCreated.get(), cc_cubesSaved.get());
         }
     }
 
@@ -304,6 +334,9 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     private void cc_onSaveAllChunks(boolean flush, CallbackInfo ci) {
         if (((CanBeCubic) level).cc_isCubic()) {
             cc_saveAllChunks(flush);
+            if (flush && cc_cubeStorage != null) {
+                cc_cubeStorage.synchronize();
+            }
             ci.cancel();
         }
     }
@@ -324,7 +357,41 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
 
     @AddMethodToSets(containers = ChunkToCubeSet.ChunkMap_redirects.class, method = "scheduleChunkLoad(Lnet/minecraft/world/level/ChunkPos;)Ljava/util/concurrent/CompletableFuture;")
     private CompletableFuture<CloAccess> cc_scheduleChunkLoad(CubePos cubePos) {
-        return cc_scheduleChunkLoad(CloPos.cube(cubePos));
+        return cc_scheduleCubeLoad(cubePos);
+    }
+
+    /**
+     * Loads a cube from disk, or makes an empty one to generate if it was never saved: the cubic counterpart of vanilla's
+     * scheduleChunkLoad, written out rather than copied, as vanilla's goes through SerializableChunkData. Read on the cube storage's
+     * thread, parsed on a background thread, built on the server thread.
+     */
+    private CompletableFuture<CloAccess> cc_scheduleCubeLoad(CubePos cubePos) {
+        CloPos cloPos = CloPos.cube(cubePos);
+        if (cc_cubeStorage == null) {
+            return CompletableFuture.completedFuture(cc_createEmptyChunk(cloPos));
+        }
+        return cc_cubeStorage.read(cubePos)
+                .thenApplyAsync(tag -> tag.map(t -> {
+                    CubeSerializer.Parsed parsed = CubeSerializer.parse(level.registryAccess(), t);
+                    if (parsed == null) {
+                        CubicChunks.LOGGER.error("Cube file at {} is missing level data, skipping", cubePos);
+                    }
+                    return parsed;
+                }), Util.backgroundExecutor().forName("parseCube"))
+                .thenApplyAsync(parsed -> {
+                    if (parsed.isPresent()) {
+                        CubeAccess cube = parsed.get().read(level, cubePos);
+                        cc_markPosition(cloPos, cube.getPersistedStatus().getChunkType());
+                        cc_cubesLoaded.incrementAndGet();
+                        return (CloAccess) cube;
+                    }
+                    cc_cubesCreated.incrementAndGet();
+                    return cc_createEmptyChunk(cloPos);
+                }, mainThreadExecutor)
+                .exceptionallyAsync(throwable -> {
+                    CubicChunks.LOGGER.error("Failed to load cube {}; generating it again", cubePos, throwable);
+                    return cc_createEmptyChunk(cloPos);
+                }, mainThreadExecutor);
     }
 
     @Dynamic @Redirect(method = "cc_scheduleChunkLoad", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/ai/village/poi/PoiManager;prefetch(Lio/github/opencubicchunks/cc_core/world/level/CloPos;)"
@@ -432,10 +499,73 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     @TransformFromMethod("saveChunkIfNeeded(Lnet/minecraft/server/level/ChunkHolder;J)Z")
     private native boolean cc_saveChunkIfNeeded(ChunkHolder holder, long gameTime);
 
-    // TODO (P2): for now we just don't save (requires more things to be CC-ified to not crash)
+    /**
+     * Saves a cube: the cubic counterpart of vanilla's save, written out rather than copied, as vanilla's goes through
+     * SerializableChunkData (and asks for heightmaps and light that cubes do not have yet). Columns are not saved yet: in a cubic world
+     * they hold no blocks.
+     */
     @AddMethodToSets(containers = ChunkToCloSet.ChunkMap_redirects.class, method = "save(Lnet/minecraft/world/level/chunk/ChunkAccess;)Z")
     private boolean cc_save(CloAccess cloAccess) {
-        return false;
+        CloPos cloPos = cloAccess.cc_getCloPos();
+        if (!cloPos.isCube() || cc_cubeStorage == null) {
+            return false; // TODO (P2) save/load: columns
+        }
+        CubeAccess cube = cloAccess instanceof ImposterProtoClo imposter ? (CubeAccess) imposter.cc_getWrappedClo() : (CubeAccess) cloAccess;
+        if (!cube.tryMarkSaved()) {
+            return false;
+        }
+        CubePos cubePos = cloPos.cubePos();
+        try {
+            ChunkStatus status = cube.getPersistedStatus();
+            if (status.getChunkType() != ChunkType.LEVELCHUNK) {
+                if (cc_isExistingCubeFull(cubePos)) {
+                    return false;
+                }
+                if (status == ChunkStatus.EMPTY && cube.getAllStarts().values().stream().noneMatch(StructureStart::isValid)) {
+                    return false;
+                }
+            }
+            activeChunkWrites.incrementAndGet();
+            CubeSerializer.Snapshot snapshot = CubeSerializer.copyOf(level, cube);
+            CompletableFuture<CompoundTag> tag = CompletableFuture.supplyAsync(snapshot::write, Util.backgroundExecutor());
+            cc_cubeStorage.write(cubePos, tag::join).handle((ignored, throwable) -> {
+                if (throwable != null) {
+                    CubicChunks.LOGGER.error("Failed to save cube {}", cubePos, throwable);
+                }
+                activeChunkWrites.decrementAndGet();
+                return null;
+            });
+            cc_markPosition(cloPos, status.getChunkType());
+            cc_cubesSaved.incrementAndGet();
+            return true;
+        } catch (Exception e) {
+            CubicChunks.LOGGER.error("Failed to save cube {}", cubePos, e);
+            return false;
+        }
+    }
+
+    /** Whether the cube on disk is finished, so a cube still generating must not overwrite it (as vanilla's isExistingChunkFull). */
+    private boolean cc_isExistingCubeFull(CubePos cubePos) {
+        long key = CloPos.cube(cubePos).asLong();
+        byte known = chunkTypeCache.get(key);
+        if (known != 0) {
+            return known == 1;
+        }
+        CompoundTag tag;
+        try {
+            tag = cc_cubeStorage.read(cubePos).join().orElse(null);
+        } catch (Exception e) {
+            CubicChunks.LOGGER.error("Failed to read cube {}", cubePos, e);
+            chunkTypeCache.put(key, (byte) -1);
+            return false;
+        }
+        if (tag == null) {
+            chunkTypeCache.put(key, (byte) -1);
+            return false;
+        }
+        ChunkType type = CubeSerializer.statusOf(tag).getChunkType();
+        chunkTypeCache.put(key, (byte) (type == ChunkType.PROTOCHUNK ? -1 : 1));
+        return type == ChunkType.LEVELCHUNK;
     }
 
 //    //region [cc_save dasm + mixin]

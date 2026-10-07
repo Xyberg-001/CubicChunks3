@@ -12,4 +12,7 @@ public interface CubicChunkMap {
     void cc_onFullChunkStatusChange(CubePos cubePos, FullChunkStatus fullChunkStatus);
 
     boolean cc_isChunkTracked(ServerPlayer player, int x, int y, int z);
+
+    /** Queues the cube to be saved soon (vanilla's setChunkUnsaved, for cubes). */
+    void cc_markCubeUnsaved(CubePos cubePos);
 }

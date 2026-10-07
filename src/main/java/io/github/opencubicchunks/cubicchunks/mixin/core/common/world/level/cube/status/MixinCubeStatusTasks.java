@@ -2,6 +2,7 @@ package io.github.opencubicchunks.cubicchunks.mixin.core.common.world.level.cube
 
 import com.llamalad7.mixinextras.sugar.Local;
 import io.github.opencubicchunks.cc_core.api.CubePos;
+import io.github.opencubicchunks.cubicchunks.server.level.CubicChunkMap;
 import io.github.opencubicchunks.cubicchunks.util.StaticCache3D;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStatusTasks;
@@ -20,7 +21,7 @@ public class MixinCubeStatusTasks {
 
     @Dynamic @Redirect(method = "dasm$redirect$lambda$full$2", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/status/WorldGenContext;unsavedListener()Lio/github/opencubicchunks/cubicchunks/world/level/cube/LevelCube$UnsavedListener;"))
     private static LevelCube.UnsavedListener onFullCube_worldGenContext_unsavedListener(WorldGenContext instance) {
-        return cubePos -> {}; // TODO (P2) save/load: this is temporary until WorldGenContext actually has a proper redirect so we can get a cube
-                              // unsaved listener
+        // TODO (P2) save/load: until WorldGenContext has a proper redirect giving a cube unsaved listener, go straight to the chunk map
+        return cubePos -> ((CubicChunkMap) instance.level().getChunkSource().chunkMap).cc_markCubeUnsaved(cubePos);
     }
 }

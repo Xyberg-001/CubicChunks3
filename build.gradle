@@ -435,3 +435,8 @@ publishing {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
+
+// Lets the dev server read console commands (e.g. stop) typed into the Gradle run
+tasks.matching { it.name == 'runServer' }.configureEach {
+    standardInput = System.in
+}
