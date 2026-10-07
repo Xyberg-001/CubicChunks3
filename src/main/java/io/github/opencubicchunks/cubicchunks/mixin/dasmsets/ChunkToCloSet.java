@@ -31,9 +31,6 @@ import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.SimulationChunkTracker;
-import net.minecraft.server.level.progress.LoggerChunkProgressListener;
-import net.minecraft.server.level.progress.ProcessorChunkProgressListener;
-import net.minecraft.server.level.progress.StoringChunkProgressListener;
 import net.minecraft.server.network.PlayerChunkSender;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
@@ -50,7 +47,7 @@ import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.level.chunk.storage.ChunkStorage;
+import net.minecraft.world.level.chunk.storage.SimpleRegionStorage;
 import net.minecraft.world.level.levelgen.blending.BlendingData;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.ticks.LevelChunkTicks;
@@ -179,16 +176,13 @@ public interface ChunkToCloSet extends GlobalSet {
     @IntraOwnerContainer(@Ref(ChunkHolder.class))
     class ChunkHolder_redirects extends GenerationChunkHolder_redirects {}
 
-    @IntraOwnerContainer(@Ref(ProcessorChunkProgressListener.class))
-    class ProcessorChunkProgressListener_redirects {}
-
     @IntraOwnerContainer(@Ref(ChunkGenerationTask.class))
     class ChunkGenerationTask_redirects {}
 
     @IntraOwnerContainer(@Ref(GenerationChunkHolder.class))
     class GenerationChunkHolder_redirects {}
 
-    @IntraOwnerContainer(@Ref(ChunkStorage.class))
+    @IntraOwnerContainer(@Ref(SimpleRegionStorage.class))
     class ChunkStorage_redirects {}
 
     @IntraOwnerContainer(@Ref(ChunkMap.class))
@@ -220,12 +214,6 @@ public interface ChunkToCloSet extends GlobalSet {
 
     @IntraOwnerContainer(@Ref(SimulationChunkTracker.class))
     class SimulationChunkTracker_redirects {}
-
-    @IntraOwnerContainer(@Ref(LoggerChunkProgressListener.class))
-    class LoggerChunkProgressListener_redirects {}
-
-    @IntraOwnerContainer(@Ref(StoringChunkProgressListener.class))
-    class StoringChunkProgressListener_redirects {}
 
     @IntraOwnerContainer(@Ref(TicketStorage.class))
     class TicketStorage_redirects {}

@@ -26,7 +26,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
-import net.minecraft.server.level.progress.ChunkProgressListener;
 import net.minecraft.world.RandomSequences;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.dimension.LevelStem;
@@ -47,8 +46,8 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
     @Inject(method = "<init>", at = @At("CTOR_HEAD"))
     private void cc_onInit(
             MinecraftServer server, Executor dispatcher, LevelStorageSource.LevelStorageAccess levelStorageAccess, ServerLevelData serverLevelData,
-            ResourceKey dimension, LevelStem levelStem, ChunkProgressListener progressListener, boolean isDebug, long biomeZoomSeed,
-            List customSpawners, boolean tickTime, RandomSequences randomSequences, CallbackInfo ci
+            ResourceKey dimension, LevelStem levelStem, boolean isDebug, long biomeZoomSeed, List customSpawners, boolean tickTime,
+            CallbackInfo ci
     ) {
         // TODO conditionally mark as cubic based on dimension, config, level data, etc
     }

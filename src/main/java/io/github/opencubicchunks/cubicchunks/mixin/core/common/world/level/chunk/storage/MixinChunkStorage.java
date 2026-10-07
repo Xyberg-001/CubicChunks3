@@ -9,11 +9,11 @@ import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.opencubicchunks.cc_core.world.level.CloPos;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.level.chunk.storage.ChunkStorage;
+import net.minecraft.world.level.chunk.storage.SimpleRegionStorage;
 import org.spongepowered.asm.mixin.Mixin;
 
-@Dasm(value = ChunkToCloSet.class, target = @Ref(ChunkStorage.class))
-@Mixin(ChunkStorage.class)
+@Dasm(value = ChunkToCloSet.class, target = @Ref(SimpleRegionStorage.class))
+@Mixin(SimpleRegionStorage.class)
 public abstract class MixinChunkStorage {
     @AddMethodToSets(containers = ChunkToCloSet.ChunkStorage_redirects.class, method = "isOldChunkAround(Lnet/minecraft/world/level/ChunkPos;I)Z")
     public boolean cc_isOldChunkAround(CloPos pos, int radius) {
