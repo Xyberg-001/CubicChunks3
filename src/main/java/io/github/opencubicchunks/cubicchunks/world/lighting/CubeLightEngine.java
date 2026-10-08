@@ -22,6 +22,18 @@ public interface CubeLightEngine {
 
     void queueSectionData(LightLayer layer, SectionPos pos, @Nullable DataLayer data);
 
+    void setLightEnabled(ChunkPos pos, boolean enabled);
+
+    void retainData(ChunkPos pos, boolean retain);
+
+    /** See {@link SkySourceRemoval}: only where the engine's updates run, so not for queued calls. */
+    void removeSkySourcesBelow(int x, int z, int startY);
+
+    /** {@link SkySourceRemoval} on an engine, for a side whose engine calls are applied at once on another path. */
+    static void removeSkySourcesBelowNow(LevelLightEngine engine, int x, int z, int startY) {
+        SkySourceRemoval.removeBelow(engine, x, z, startY);
+    }
+
     static CubeLightEngine of(LevelLightEngine engine) {
         return new CubeLightEngine() {
             @Override public void updateSectionStatus(SectionPos pos, boolean empty) {
@@ -38,6 +50,18 @@ public interface CubeLightEngine {
 
             @Override public void queueSectionData(LightLayer layer, SectionPos pos, @Nullable DataLayer data) {
                 engine.queueSectionData(layer, pos, data);
+            }
+
+            @Override public void setLightEnabled(ChunkPos pos, boolean enabled) {
+                engine.setLightEnabled(pos, enabled);
+            }
+
+            @Override public void retainData(ChunkPos pos, boolean retain) {
+                engine.retainData(pos, retain);
+            }
+
+            @Override public void removeSkySourcesBelow(int x, int z, int startY) {
+                SkySourceRemoval.removeBelow(engine, x, z, startY);
             }
         };
     }

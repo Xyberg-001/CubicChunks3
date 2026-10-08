@@ -9,6 +9,7 @@ import net.minecraft.server.level.ThreadedLevelLightEngine;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.DataLayer;
+import net.minecraft.world.level.lighting.LevelLightEngine;
 
 /**
  * The server's threaded light engine, opened up for cubes: tasks can be queued for its light thread like vanilla's own, and from such a task
@@ -24,6 +25,13 @@ public interface CubicThreadedLightEngine {
     void cc_checkBlockNow(BlockPos pos);
 
     void cc_queueSectionDataNow(LightLayer layer, SectionPos pos, @Nullable DataLayer data);
+
+    void cc_setLightEnabledNow(ChunkPos pos, boolean enabled);
+
+    void cc_retainDataNow(ChunkPos pos, boolean retain);
+
+    /** The engine itself, for calls that change its storage directly (only from a task on the light thread). */
+    LevelLightEngine cc_engine();
 
     /** The engine's calls applied at once: only for tasks running on the light thread. */
     default CubeLightEngine cc_onLightThread() {
@@ -42,6 +50,18 @@ public interface CubicThreadedLightEngine {
 
             @Override public void queueSectionData(LightLayer layer, SectionPos pos, @Nullable DataLayer data) {
                 cc_queueSectionDataNow(layer, pos, data);
+            }
+
+            @Override public void setLightEnabled(ChunkPos pos, boolean enabled) {
+                cc_setLightEnabledNow(pos, enabled);
+            }
+
+            @Override public void retainData(ChunkPos pos, boolean retain) {
+                cc_retainDataNow(pos, retain);
+            }
+
+            @Override public void removeSkySourcesBelow(int x, int z, int startY) {
+                CubeLightEngine.removeSkySourcesBelowNow(cc_engine(), x, z, startY);
             }
         };
     }

@@ -44,4 +44,16 @@ public abstract class MixinThreadedLevelLightEngine extends LevelLightEngine imp
     @Override public void cc_queueSectionDataNow(LightLayer layer, SectionPos pos, @Nullable DataLayer data) {
         super.queueSectionData(layer, pos, data);
     }
+
+    @Override public void cc_setLightEnabledNow(ChunkPos pos, boolean enabled) {
+        super.setLightEnabled(pos, enabled);
+    }
+
+    @Override public void cc_retainDataNow(ChunkPos pos, boolean retain) {
+        super.retainData(pos, retain);
+    }
+
+    @Override public LevelLightEngine cc_engine() {
+        return this;
+    }
 }

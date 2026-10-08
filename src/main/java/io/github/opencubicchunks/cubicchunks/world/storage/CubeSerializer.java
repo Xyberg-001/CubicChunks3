@@ -14,9 +14,11 @@ import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
+import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.ImposterProtoCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.ProtoCube;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.shorts.ShortArrayList;
@@ -25,6 +27,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -35,6 +38,7 @@ import net.minecraft.nbt.ShortTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Block;
@@ -42,6 +46,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.chunk.PalettedContainerFactory;
@@ -52,6 +57,7 @@ import net.minecraft.world.level.chunk.status.ChunkType;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext;
+import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.ticks.LevelChunkTicks;
 import net.minecraft.world.ticks.ProtoChunkTicks;
@@ -63,13 +69,14 @@ import org.slf4j.Logger;
  * written to NBT off it; saved NBT is {@link #parse parsed} off the server thread and {@link Parsed#read read} into a cube on it.
  * <p>
  * Saved: the sections' blocks and biomes, block entities, block and fluid ticks, post-processing, structure starts and references, the
- * generation status, inhabited time, and for cubes still generating their pending entities. Not yet: light and heightmaps
- * (cubes have neither yet), and entities of finished cubes (they need cubic entity storage).
+ * generation status, inhabited time, the sections' block and sky light once the cube is lit (version 2; cubes saved without it are relit),
+ * and for cubes still generating their pending entities. Not yet: heightmaps (cubes have none yet), and entities of finished cubes (they
+ * need cubic entity storage).
  */
 public final class CubeSerializer {
     private static final Logger LOGGER = LogUtils.getLogger();
-    /** Version of this format, so later changes can read cubes saved before them. */
-    public static final int FORMAT_VERSION = 1;
+    /** Version of this format, so later changes can read cubes saved before them. 2: sections carry their light (BlockLight, SkyLight). */
+    public static final int FORMAT_VERSION = 2;
     private static final Codec<List<SavedTick<Block>>> BLOCK_TICKS_CODEC = SavedTick.codec(BuiltInRegistries.BLOCK.byNameCodec()).listOf();
     private static final Codec<List<SavedTick<Fluid>>> FLUID_TICKS_CODEC = SavedTick.codec(BuiltInRegistries.FLUID.byNameCodec()).listOf();
 
@@ -85,7 +92,8 @@ public final class CubeSerializer {
     public record Snapshot(
             PalettedContainerFactory containerFactory, CubePos pos, long lastUpdate, long inhabitedTime, ChunkStatus status,
             LevelChunkSection[] sections, List<CompoundTag> blockEntities, List<CompoundTag> entities, ChunkAccess.PackedTicks ticks,
-            ShortList[] postProcessing, boolean lightCorrect, CompoundTag structures
+            ShortList[] postProcessing, boolean lightCorrect, @Nullable DataLayer[] blockLight, @Nullable DataLayer[] skyLight,
+            CompoundTag structures
     ) {
         public CompoundTag write() {
             CompoundTag tag = NbtUtils.addCurrentDataVersion(new CompoundTag());
@@ -107,6 +115,12 @@ public final class CubeSerializer {
                 sectionTag.putByte("i", (byte) i);
                 sectionTag.store("block_states", containerFactory.blockStatesContainerCodec(), section.getStates());
                 sectionTag.store("biomes", containerFactory.biomeContainerCodec(), section.getBiomes());
+                if (blockLight[i] != null) {
+                    sectionTag.putByteArray("BlockLight", blockLight[i].getData());
+                }
+                if (skyLight[i] != null) {
+                    sectionTag.putByteArray("SkyLight", skyLight[i].getData());
+                }
                 sectionList.add(sectionTag);
             }
             tag.put("sections", sectionList);
@@ -163,16 +177,31 @@ public final class CubeSerializer {
         CompoundTag structures = packStructures(StructurePieceSerializationContext.fromLevel(level), chunkPosOf(pos), cube.getAllStarts(),
                 cube.getAllReferences());
 
+        // as vanilla's SerializableChunkData.copyOf: the light engine's layers for the cube's sections, copied (only once it is lit)
+        DataLayer[] blockLight = new DataLayer[sections.length];
+        DataLayer[] skyLight = new DataLayer[sections.length];
+        boolean lightCorrect = cube.isLightCorrect();
+        if (lightCorrect) {
+            LevelLightEngine lightEngine = level.getChunkSource().getLightEngine();
+            for (int i = 0; i < sections.length; i++) {
+                SectionPos sectionPos = sectionPosOf(pos, i);
+                DataLayer block = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
+                DataLayer sky = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
+                blockLight[i] = block == null ? null : block.copy();
+                skyLight[i] = sky == null ? null : sky.copy();
+            }
+        }
+
         return new Snapshot(level.palettedContainerFactory(), pos, level.getGameTime(), cube.getInhabitedTime(), status,
                 sections, blockEntities, entities, cube.getTicksForSerialization(level.getGameTime()), postProcessing,
-                cube.isLightCorrect(), structures);
+                lightCorrect, blockLight, skyLight, structures);
     }
 
     /** A saved cube read from NBT, ready to be turned into a cube on the server thread. */
     public record Parsed(
             CubePos pos, long inhabitedTime, ChunkStatus status, LevelChunkSection[] sections, List<CompoundTag> blockEntities,
             List<CompoundTag> entities, ChunkAccess.PackedTicks ticks, ShortList[] postProcessing,
-            boolean lightCorrect, CompoundTag structures
+            boolean lightCorrect, @Nullable DataLayer[] blockLight, @Nullable DataLayer[] skyLight, CompoundTag structures
     ) {
         /**
          * The cube, made on the server thread: a {@link ProtoCube} if it was still generating, else an {@link ImposterProtoCube} wrapping
@@ -185,6 +214,7 @@ public final class CubeSerializer {
             Map<Structure, StructureStart> starts = unpackStructureStarts(StructurePieceSerializationContext.fromLevel(level), structures,
                     level.getSeed());
             Map<Structure, LongSet> references = unpackStructureReferences(level.registryAccess(), structures);
+            this.queueLight(level, expected);
 
             if (status.getChunkType() == ChunkType.LEVELCHUNK) {
                 LevelCube cube = new LevelCube(level, expected, UpgradeData.EMPTY, new LevelChunkTicks<>(ticks.blocks()),
@@ -216,6 +246,30 @@ public final class CubeSerializer {
             return cube;
         }
 
+        /**
+         * As vanilla's SerializableChunkData.read: the saved light goes to the light engine, to be used when the cube's sections are stored.
+         * The cube's light step still spreads light (see CubicLight), but over saved light that finds little left to do.
+         */
+        private void queueLight(ServerLevel level, CubePos at) {
+            if (!lightCorrect) {
+                return;
+            }
+            CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+            if (light != null) {
+                light.retainForLoad(at);
+            }
+            LevelLightEngine lightEngine = level.getChunkSource().getLightEngine();
+            for (int i = 0; i < CubicConstants.SECTION_COUNT; i++) {
+                SectionPos sectionPos = sectionPosOf(at, i);
+                if (blockLight[i] != null) {
+                    lightEngine.queueSectionData(LightLayer.BLOCK, sectionPos, blockLight[i]);
+                }
+                if (skyLight[i] != null) {
+                    lightEngine.queueSectionData(LightLayer.SKY, sectionPos, skyLight[i]);
+                }
+            }
+        }
+
         private void addPostProcessing(CubeAccess cube) {
             for (int i = 0; i < postProcessing.length && i < CubicConstants.SECTION_COUNT; i++) {
                 if (postProcessing[i] != null && !postProcessing[i].isEmpty()) {
@@ -235,6 +289,8 @@ public final class CubeSerializer {
         PalettedContainerFactory containerFactory = PalettedContainerFactory.create(registries);
 
         LevelChunkSection[] sections = new LevelChunkSection[CubicConstants.SECTION_COUNT];
+        DataLayer[] blockLight = new DataLayer[CubicConstants.SECTION_COUNT];
+        DataLayer[] skyLight = new DataLayer[CubicConstants.SECTION_COUNT];
         ListTag sectionList = tag.getListOrEmpty("sections");
         for (int n = 0; n < sectionList.size(); n++) {
             CompoundTag sectionTag = sectionList.getCompoundOrEmpty(n);
@@ -254,6 +310,8 @@ public final class CubeSerializer {
                             .getOrThrow(CubeReadException::new))
                     .orElseGet(containerFactory::createForBiomes);
             sections[i] = new LevelChunkSection(states, biomes);
+            blockLight[i] = sectionTag.getByteArray("BlockLight").map(CubeSerializer::lightLayer).orElse(null);
+            skyLight[i] = sectionTag.getByteArray("SkyLight").map(CubeSerializer::lightLayer).orElse(null);
         }
 
         ListTag postProcessingList = tag.getListOrEmpty("PostProcessing");
@@ -272,7 +330,27 @@ public final class CubeSerializer {
                 tag.getListOrEmpty("entities").compoundStream().toList(),
                 new ChunkAccess.PackedTicks(tag.read("block_ticks", BLOCK_TICKS_CODEC).orElse(List.of()),
                         tag.read("fluid_ticks", FLUID_TICKS_CODEC).orElse(List.of())),
-                postProcessing, tag.getBooleanOr("isLightOn", false), tag.getCompoundOrEmpty("structures"));
+                // light is saved from version 2: an older cube marked lit has none to keep, so it is lit again
+                postProcessing, tag.getBooleanOr("isLightOn", false) && tag.getIntOr("CubicChunksVersion", 1) >= 2, blockLight, skyLight,
+                tag.getCompoundOrEmpty("structures"));
+    }
+
+    private static @Nullable DataLayer lightLayer(byte[] data) {
+        return data.length == DataLayer.SIZE ? new DataLayer(data) : null;
+    }
+
+    /** The section at index i of a cube's sections, as Coords.sectionToIndex numbers them. */
+    private static SectionPos sectionPosOf(CubePos cube, int i) {
+        for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
+            for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
+                for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
+                    if (Coords.sectionToIndex(dx, dy, dz) == i) {
+                        return SectionPos.of(Coords.cubeToSection(cube.getX(), dx), Coords.cubeToSection(cube.getY(), dy), Coords.cubeToSection(cube.getZ(), dz));
+                    }
+                }
+            }
+        }
+        throw new IllegalArgumentException("No section " + i + " in a cube");
     }
 
     private static @Nullable LevelCube.PostLoadProcessor postLoad(ServerLevel level, List<CompoundTag> blockEntities) {

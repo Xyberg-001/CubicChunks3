@@ -7,6 +7,7 @@ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
@@ -59,8 +60,10 @@ public final class CubicChunksCommand {
         ServerLevel level = source.getLevel();
         int sky = level.getBrightness(LightLayer.SKY, pos);
         int block = level.getBrightness(LightLayer.BLOCK, pos);
+        CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+        String column = light == null ? "" : "; " + light.describeSky(pos.getX(), pos.getZ());
         source.sendSuccess(() -> Component.literal("Light at " + pos.toShortString() + ": sky " + sky + ", block " + block + " ("
-                + level.getBlockState(pos).getBlock().getName().getString() + ")"), false);
+                + level.getBlockState(pos).getBlock().getName().getString() + ")" + column), false);
         return Math.max(sky, block);
     }
 

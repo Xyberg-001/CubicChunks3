@@ -27,8 +27,10 @@ import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.GlobalSet;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicThreadedLightEngine;
+import io.github.opencubicchunks.cubicchunks.server.level.GenerationCloHolder;
 import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache;
 import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeLightView;
+import io.github.opencubicchunks.cubicchunks.world.level.chunklike.CloAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
@@ -305,7 +307,16 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
 
     @Override @AddMethodToSets(containers = GlobalSet.ServerChunkCache_redirects.class, method = "onLightUpdate(Lnet/minecraft/world/level/LightLayer;Lnet/minecraft/core/SectionPos;)V")
     public void cc_onLightUpdate(LightLayer pType, SectionPos pPos) {
-        // TODO (P2) lighting
+        // as vanilla's ChunkHolder.sectionLightChanged: a cube whose light changed needs saving, light being saved with it. Nothing is sent:
+        // the client works out its own light (see CubicLight).
+        this.mainThreadProcessor.execute(() -> {
+            ChunkHolder holder = this.getVisibleChunkIfPresent(CloPos.cubeAsLong(Coords.sectionToCube(pPos.x()), Coords.sectionToCube(pPos.y()),
+                    Coords.sectionToCube(pPos.z())));
+            CloAccess cube = holder == null ? null : ((GenerationCloHolder) holder).cc_getLatestClo();
+            if (cube != null) {
+                cube.markUnsaved();
+            }
+        });
     }
 
     @AddTransformToSets(ChunkToCloSet.ServerChunkCache_redirects.class)

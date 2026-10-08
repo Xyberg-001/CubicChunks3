@@ -66,7 +66,7 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
                     // the server sends no cube light: the client works it out (see CubicClientLight)
                     CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
                     if (light != null) {
-                        light.onCubeLoaded(levelCube);
+                        light.onCubeLoaded(levelCube, false);
                     }
                     // as 26.3's enableChunkLight: the cube's sections and their neighbours are dirty now that it can render
                     int minSectionX = Coords.cubeToSection(x, 0);

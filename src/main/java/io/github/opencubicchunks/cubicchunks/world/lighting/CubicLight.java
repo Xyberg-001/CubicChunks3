@@ -1,5 +1,6 @@
 package io.github.opencubicchunks.cubicchunks.world.lighting;
 
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
@@ -12,7 +13,6 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.lighting.ChunkSkyLightSources;
 
 /**
  * Light for the cubes of a cubic level, on either side. The side's own vanilla light engine does the propagation; it reads the level through
@@ -28,6 +28,9 @@ public final class CubicLight {
     private final Supplier<CubeLightEngine> immediate;
     private final Supplier<CubeLightEngine> queued;
     private final ConcurrentHashMap<Long, CubicLightColumn> columns = new ConcurrentHashMap<>();
+    /** Columns whose queued light the engine keeps while cubes with saved light load into them, and how many such cubes are loading. */
+    private final ConcurrentHashMap<Long, Integer> retainedColumns = new ConcurrentHashMap<>();
+    private final Set<Long> retainedCubes = ConcurrentHashMap.newKeySet();
 
     public CubicLight(CubeLightView view, Supplier<CubeLightEngine> immediate, Supplier<CubeLightEngine> queued) {
         this.view = view;
@@ -40,11 +43,17 @@ public final class CubicLight {
     }
 
     /**
-     * A cube is ready for light (it arrived, or reached its light step): its non-empty sections join the light engine's storage, and the sky and
-     * block light of the four columns it spans is spread again, as vanilla does for a chunk. Where the cube roofs over sky that was lit before,
-     * the light below is taken back.
+     * A cube is ready for light (it arrived, or reached its light step). Its non-empty sections join the light engine's storage (the server
+     * did that in the cube's initializeLight step already), and then:
+     * <ul>
+     * <li>the sky light under any column the cube roofs over is taken back (lit while the cube was not there, as open to the sky; see
+     * {@link SkySourceRemoval});</li>
+     * <li>a cube with saved light ({@code lighted}) keeps it, as vanilla keeps a chunk's: the light was worked out when what lay around and
+     * above the cube was there, which may not be loaded now, so its columns are only switched on;</li>
+     * <li>otherwise the sky and block light of the four columns it spans is spread again, as vanilla does for a chunk.</li>
+     * </ul>
      */
-    public void onCubeLoaded(CubeAccess cube) {
+    public void onCubeLoaded(CubeAccess cube, boolean lighted) {
         CubeLightEngine engine = this.immediate.get();
         CubePos cubePos = cube.cc_getCubePos();
         LevelChunkSection[] sections = cube.getSections();
@@ -56,37 +65,92 @@ public final class CubicLight {
                 }
             }
         }
+        int cubeMinY = cubePos.minCubeY();
         for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
             for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
                 int chunkX = Coords.cubeToSection(cubePos.getX(), dx);
                 int chunkZ = Coords.cubeToSection(cubePos.getZ(), dz);
                 CubicSkyLightSources sources = this.column(chunkX, chunkZ).sources();
-                int[] before = sources.known();
                 sources.forgetAll();
                 int minX = SectionPos.sectionToBlockCoord(chunkX);
                 int minZ = SectionPos.sectionToBlockCoord(chunkZ);
                 for (int z = 0; z < 16; z++) {
                     for (int x = 0; x < 16; x++) {
-                        int old = before[x + z * 16];
-                        if (old == CubicSkyLightSources.UNKNOWN) {
-                            continue; // never used, so nothing was lit from it
-                        }
-                        int now = sources.getLowestSourceY(x, z);
-                        if (now > old) {
-                            // the sky now starts higher: checking a block of the column takes back the sources below the new start
-                            engine.checkBlock(new BlockPos(minX + x, now == ChunkSkyLightSources.NEGATIVE_INFINITY ? old : now, minZ + z));
+                        if (sources.getLowestSourceY(x, z) >= cubeMinY) {
+                            // the sky now stops in this cube (or at its top): whatever below was lit as open sky is not
+                            engine.removeSkySourcesBelow(minX + x, minZ + z, cubeMinY - 1);
                         }
                     }
                 }
-                engine.propagateLightSources(new ChunkPos(chunkX, chunkZ));
+                if (lighted) {
+                    engine.setLightEnabled(new ChunkPos(chunkX, chunkZ), true);
+                } else {
+                    engine.propagateLightSources(new ChunkPos(chunkX, chunkZ));
+                }
             }
         }
+    }
+
+    /**
+     * A cube's saved light is about to be queued (as vanilla's SerializableChunkData.read does for a chunk): until the cube's light is
+     * initialised, the engine keeps queued light for its columns even where a section drops out of storage meanwhile.
+     */
+    public void retainForLoad(CubePos cubePos) {
+        if (!this.retainedCubes.add(cubePos.asLong())) {
+            return;
+        }
+        forEachColumn(cubePos, (chunkX, chunkZ) -> {
+            if (this.retainedColumns.merge(ChunkPos.pack(chunkX, chunkZ), 1, Integer::sum) == 1) {
+                this.queued.get().retainData(new ChunkPos(chunkX, chunkZ), true);
+            }
+        });
+    }
+
+    /** The cube's light is initialised (its initializeLight step, on the light thread): its columns need not keep queued light for it. */
+    public void releaseAfterLoad(CubePos cubePos) {
+        this.release(cubePos, this.immediate.get());
+    }
+
+    private void release(CubePos cubePos, CubeLightEngine engine) {
+        if (!this.retainedCubes.remove(cubePos.asLong())) {
+            return;
+        }
+        forEachColumn(cubePos, (chunkX, chunkZ) -> {
+            if (this.retainedColumns.merge(ChunkPos.pack(chunkX, chunkZ), -1, (a, b) -> a + b == 0 ? null : a + b) == null) {
+                engine.retainData(new ChunkPos(chunkX, chunkZ), false);
+            }
+        });
+    }
+
+    private static void forEachColumn(CubePos cubePos, IntBiConsumer action) {
+        for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
+            for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
+                action.accept(Coords.cubeToSection(cubePos.getX(), dx), Coords.cubeToSection(cubePos.getZ(), dz));
+            }
+        }
+    }
+
+    private interface IntBiConsumer {
+        void accept(int a, int b);
+    }
+
+    /** Where sky light starts in a block column, and which cube Ys it was worked out from (for /cubicchunks light). */
+    public String describeSky(int x, int z) {
+        int chunkX = SectionPos.blockToSectionCoord(x);
+        int chunkZ = SectionPos.blockToSectionCoord(z);
+        int lowest = this.column(chunkX, chunkZ).sources().getLowestSourceY(SectionPos.sectionRelative(x), SectionPos.sectionRelative(z));
+        StringBuilder cubes = new StringBuilder();
+        for (CubeAccess cube : this.view.cubesTopDown(Coords.blockToCube(x), Coords.blockToCube(z))) {
+            cubes.append(cubes.isEmpty() ? "" : ",").append(cube.cc_getCubePos().getY());
+        }
+        return "sky enters at " + (lowest == Integer.MIN_VALUE ? "-inf" : Integer.toString(lowest)) + " over cubes Y " + cubes;
     }
 
     /** A cube has left: its sections' light goes, and the sky over its columns is worked out again when next needed. */
     public void onCubeUnloaded(CubeAccess cube) {
         CubeLightEngine engine = this.queued.get();
         CubePos cubePos = cube.cc_getCubePos();
+        this.release(cubePos, engine); // in case it leaves before its light was initialised
         for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
             for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
                 int chunkX = Coords.cubeToSection(cubePos.getX(), dx);

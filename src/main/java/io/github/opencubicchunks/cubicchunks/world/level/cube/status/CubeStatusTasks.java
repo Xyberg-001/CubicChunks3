@@ -46,6 +46,9 @@ public class CubeStatusTasks {
     @AddFieldToSets(containers = ChunkToCubeSet.ChunkStatusTasks_to_CubeStatusTasks_redirects.class, field = "LOGGER:Lorg/slf4j/Logger;")
     private static final Logger LOGGER = LogUtils.getLogger();
 
+    /** -Dcubicchunks.relight=true: cubes loaded with saved light are lit again instead (to repair light, like vanilla's --eraseCache). */
+    private static final boolean RELIGHT = Boolean.getBoolean("cubicchunks.relight");
+
     @AddTransformToSets(ChunkToCubeSet.ChunkStatusTasks_to_CubeStatusTasks_redirects.class)
     @TransformFromMethod(owner = @Ref(ChunkStatusTasks.class), value = "isLighted(Lnet/minecraft/world/level/chunk/ChunkAccess;)Z")
     private static native boolean isLighted(CubeAccess cube);
@@ -150,8 +153,13 @@ public class CubeStatusTasks {
                 }
             }
         });
-        return CompletableFuture.supplyAsync(() -> cube,
-                task -> engine.cc_addTask(cubeToSection(pos.getX(), 0), cubeToSection(pos.getZ(), 0), ThreadedLevelLightEngine.TaskType.POST_UPDATE, task));
+        CubicLight light = ((CubeSource) worldGenContext.level().getChunkSource()).cc_cubicLight();
+        return CompletableFuture.supplyAsync(() -> {
+            if (light != null) {
+                light.releaseAfterLoad(pos); // as vanilla's retainData(pos, false) here: saved light queued at load is in place
+            }
+            return cube;
+        }, task -> engine.cc_addTask(cubeToSection(pos.getX(), 0), cubeToSection(pos.getZ(), 0), ThreadedLevelLightEngine.TaskType.POST_UPDATE, task));
     }
 
     @AddMethodToSets(containers = ChunkToCubeSet.ChunkStatusTasks_to_CubeStatusTasks_redirects.class, method = "light(Lnet/minecraft/world/level/chunk/status/WorldGenContext;Lnet/minecraft/world/level/chunk/status/ChunkStep;"
@@ -159,15 +167,16 @@ public class CubeStatusTasks {
     public static CompletableFuture<CubeAccess> light(
             WorldGenContext worldGenContext, CubeStep step, StaticCache3D<GenerationChunkHolder> cache, CubeAccess cube
     ) {
-        // as vanilla's ThreadedLevelLightEngine.lightChunk, but always spread: cube light is not saved yet (see CubicLight)
+        // as vanilla's ThreadedLevelLightEngine.lightChunk: a cube loaded with its light keeps it, others are lit (see CubicLight)
         CubicThreadedLightEngine engine = (CubicThreadedLightEngine) worldGenContext.lightEngine();
         CubicLight light = ((CubeSource) worldGenContext.level().getChunkSource()).cc_cubicLight();
         CubePos pos = cube.cc_getCubePos();
         int chunkX = cubeToSection(pos.getX(), 0);
         int chunkZ = cubeToSection(pos.getZ(), 0);
+        boolean lighted = !RELIGHT && isLighted(cube);
         cube.setLightCorrect(false);
         if (light != null) {
-            engine.cc_addTask(chunkX, chunkZ, ThreadedLevelLightEngine.TaskType.PRE_UPDATE, () -> light.onCubeLoaded(cube));
+            engine.cc_addTask(chunkX, chunkZ, ThreadedLevelLightEngine.TaskType.PRE_UPDATE, () -> light.onCubeLoaded(cube, lighted));
         }
         return CompletableFuture.supplyAsync(() -> {
             cube.setLightCorrect(true);
