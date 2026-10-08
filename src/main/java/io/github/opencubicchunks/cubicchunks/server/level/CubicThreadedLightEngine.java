@@ -30,6 +30,8 @@ public interface CubicThreadedLightEngine {
 
     void cc_retainDataNow(ChunkPos pos, boolean retain);
 
+    void cc_runLightUpdatesNow();
+
     /** The engine itself, for calls that change its storage directly (only from a task on the light thread). */
     LevelLightEngine cc_engine();
 
@@ -58,6 +60,10 @@ public interface CubicThreadedLightEngine {
 
             @Override public void retainData(ChunkPos pos, boolean retain) {
                 cc_retainDataNow(pos, retain);
+            }
+
+            @Override public void runPendingUpdates(ChunkPos near) {
+                cc_runLightUpdatesNow();
             }
 
             @Override public void removeSkySourcesBelow(int x, int z, int startY) {

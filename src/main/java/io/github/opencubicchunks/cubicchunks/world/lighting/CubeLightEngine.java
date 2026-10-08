@@ -2,8 +2,10 @@ package io.github.opencubicchunks.cubicchunks.world.lighting;
 
 import javax.annotation.Nullable;
 
+import io.github.opencubicchunks.cubicchunks.server.level.CubicThreadedLightEngine;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.server.level.ThreadedLevelLightEngine;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.DataLayer;
@@ -25,6 +27,13 @@ public interface CubeLightEngine {
     void setLightEnabled(ChunkPos pos, boolean enabled);
 
     void retainData(ChunkPos pos, boolean retain);
+
+    /**
+     * The light work already queued in the engine, done now (near: a chunk where it is needed, for the server's task queue). Before a cube's
+     * sections leave: the engine drops sections before it spreads light, and light queued from them (a cube's sky sources, when it arrived
+     * in the same batch) would then point at sections it no longer has.
+     */
+    void runPendingUpdates(ChunkPos near);
 
     /** See {@link SkySourceRemoval}: only where the engine's updates run, so not for queued calls. */
     void removeSkySourcesBelow(int x, int z, int startY);
@@ -65,6 +74,16 @@ public interface CubeLightEngine {
 
             @Override public void retainData(ChunkPos pos, boolean retain) {
                 engine.retainData(pos, retain);
+            }
+
+            @Override public void runPendingUpdates(ChunkPos near) {
+                if (engine instanceof CubicThreadedLightEngine threaded) {
+                    // its own runLightUpdates is not to be called: the light thread runs it, so ask for it there
+                    threaded.cc_addTask(near.x(), near.z(), ThreadedLevelLightEngine.TaskType.PRE_UPDATE,
+                            threaded::cc_runLightUpdatesNow);
+                } else {
+                    engine.runLightUpdates();
+                }
             }
 
             @Override public void removeSkySourcesBelow(int x, int z, int startY) {

@@ -53,6 +53,10 @@ public abstract class MixinThreadedLevelLightEngine extends LevelLightEngine imp
         super.retainData(pos, retain);
     }
 
+    @Override public void cc_runLightUpdatesNow() {
+        super.runLightUpdates();
+    }
+
     @Override public LevelLightEngine cc_engine() {
         return this;
     }

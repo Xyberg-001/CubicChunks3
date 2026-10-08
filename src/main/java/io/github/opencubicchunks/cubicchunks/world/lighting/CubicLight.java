@@ -158,6 +158,7 @@ public final class CubicLight {
     public void onCubeUnloaded(CubeAccess cube) {
         CubeLightEngine engine = this.queued.get();
         CubePos cubePos = cube.cc_getCubePos();
+        engine.runPendingUpdates(new ChunkPos(Coords.cubeToSection(cubePos.getX(), 0), Coords.cubeToSection(cubePos.getZ(), 0)));
         this.release(cubePos, engine); // in case it leaves before its light was initialised
         for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
             for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
