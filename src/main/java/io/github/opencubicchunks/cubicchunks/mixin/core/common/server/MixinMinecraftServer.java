@@ -5,16 +5,20 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import io.github.opencubicchunks.cc_core.world.SpawnPlaceFinder;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
+import io.github.opencubicchunks.cubicchunks.server.level.progress.CubicChunkLoadStatusView;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.progress.ChunkLoadStatusView;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * The initial spawn in a cubic world. 26.3 takes the spawn chunk from the generator's origin and its height from the generator's spawn
@@ -40,5 +44,11 @@ public abstract class MixinMinecraftServer {
     @WrapOperation(method = "setInitialSpawn", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;getMinY()I"))
     private static int cc_spawnFloor(ServerLevel level, Operation<Integer> original) {
         return ((CanBeCubic) level).cc_isCubic() ? CubicHeight.minY() : original.call(level);
+    }
+
+    /** The loading screen's view of chunk loading also shows the cubes of a cubic level (see CubicChunkLoadStatusView). */
+    @Inject(method = "createChunkLoadStatusView", at = @At("RETURN"), cancellable = true)
+    private void cc_cubicLoadStatusView(int radius, CallbackInfoReturnable<ChunkLoadStatusView> cir) {
+        cir.setReturnValue(new CubicChunkLoadStatusView((MinecraftServer) (Object) this, cir.getReturnValue()));
     }
 }

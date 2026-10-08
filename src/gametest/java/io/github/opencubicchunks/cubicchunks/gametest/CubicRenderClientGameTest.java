@@ -6,10 +6,14 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.LevelLoadingScreen;
+import net.minecraft.client.multiplayer.LevelLoadTracker;
 import net.minecraft.client.renderer.chunk.CompiledSectionMesh;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.server.level.ChunkLevel;
+import net.minecraft.server.level.progress.ChunkLoadStatusView;
 import net.minecraft.world.level.LightLayer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,6 +33,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             world.getServer().runCommand("gamemode spectator @a");
             world.getServer().runCommand("time set noon");
 
+            loadingScreen(context);
             visit(context, world, "ground", 0, 40, 0, null);
             visit(context, world, "y1000", 0, 1010, 0,
                     new String[] { "fill -10 1000 -10 10 1000 10 minecraft:diamond_block" });
@@ -36,6 +41,24 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
                     new String[] { "fill -10 -299 -10 10 -280 10 minecraft:air", "fill -10 -300 -10 10 -300 10 minecraft:emerald_block",
                             "setblock 0 -295 3 minecraft:glowstone" });
         }
+    }
+
+    /** The loading screen's map over the loaded world: a status view from the integrated server, focused where the player is. */
+    private static void loadingScreen(ClientGameTestContext context) {
+        context.waitTicks(LOAD_TICKS);
+        context.setScreen(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            int radius = Math.max(5, 3) + ChunkLevel.RADIUS_AROUND_FULL_CHUNK + 1; // as Minecraft.doWorldLoad
+            ChunkLoadStatusView view = mc.getSingleplayerServer().createChunkLoadStatusView(radius);
+            view.moveTo(mc.level.dimension(), mc.player.chunkPosition());
+            LevelLoadTracker tracker = new LevelLoadTracker();
+            tracker.setServerChunkStatusView(view);
+            LOGGER.info("[cc-gametest] loading screen view: {}", view.getClass().getSimpleName());
+            return new LevelLoadingScreen(tracker, LevelLoadingScreen.Reason.OTHER);
+        });
+        context.waitTicks(5);
+        context.takeScreenshot("cc-loading-screen");
+        context.setScreen(() -> null);
     }
 
     private static void visit(ClientGameTestContext context, TestSingleplayerContext world, String name, int x, int y, int z, String[] build) {
