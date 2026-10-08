@@ -50,4 +50,37 @@ final class SkySourceRemoval {
             }
         }
     }
+
+    /**
+     * Takes back every full sky light in a column from topY down to bottomY, not only the first run of it: for a stretch of a column below
+     * where its sky starts, which vanilla never leaves at 15 (light from beside is 14 at most). A cube lit while it was the top of its column
+     * starts out at full sky light throughout, and if it is saved before the cubes above take that back, it comes back with it.
+     */
+    static void removeWithin(LevelLightEngine engine, int x, int z, int topY, int bottomY) {
+        LightEngine<?, ?> sky = ((LevelLightEngineAccess) engine).cc_skyEngine();
+        if (sky == null || topY < bottomY) {
+            return;
+        }
+        LayerLightSectionStorageAccess sections = (LayerLightSectionStorageAccess) ((LightEngineAccess) sky).cc_storage();
+        int sectionX = SectionPos.blockToSectionCoord(x);
+        int sectionZ = SectionPos.blockToSectionCoord(z);
+        boolean clearedAbove = false;
+        for (int sectionY = SectionPos.blockToSectionCoord(topY); sectionY >= SectionPos.blockToSectionCoord(bottomY); sectionY--) {
+            if (!sections.cc_storingLightForSection(SectionPos.asLong(sectionX, sectionY, sectionZ))) {
+                clearedAbove = false;
+                continue;
+            }
+            int sectionBottomY = SectionPos.sectionToBlockCoord(sectionY);
+            for (int y = Math.min(sectionBottomY + 15, topY); y >= Math.max(sectionBottomY, bottomY); y--) {
+                long blockNode = BlockPos.asLong(x, y, z);
+                if (sections.cc_getStoredLevel(blockNode) != 15) {
+                    clearedAbove = false;
+                    continue;
+                }
+                sections.cc_setStoredLevel(blockNode, 0);
+                ((LightEngineAccess) sky).cc_enqueueDecrease(blockNode, clearedAbove ? REMOVE : REMOVE_TOP);
+                clearedAbove = true;
+            }
+        }
+    }
 }

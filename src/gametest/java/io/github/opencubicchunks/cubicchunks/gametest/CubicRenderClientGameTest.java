@@ -47,6 +47,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("ticks")) randomTicks(context, world, "ticks-y-300", -300, false);
             if (stage("thunder")) thunder(context, world);
             if (stage("scheduled")) scheduledTicks(context, world);
+            if (stage("audit")) lightAudit(context, world);
         }
     }
 
@@ -277,6 +278,60 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         String back = world.getServer().computeOnServer(server -> "back: lamp lit " + server.overworld().getBlockState(lamp).getValue(net.minecraft.world.level.block.RedstoneLampBlock.LIT));
         LOGGER.info("[cc-gametest] scheduled: {}", back);
         context.takeScreenshot("cc-scheduled");
+    }
+
+    /**
+     * Back on the old surface after the trips up and down: no block that stops light may hold full sky light (vanilla never stores 15 in
+     * one; bad sky sources once wrote it into the bottom row of cubes loaded back). Counts them on the server around the player.
+     */
+    private static void lightAudit(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("tp @a 0 60 0");
+        context.waitTicks(LOAD_TICKS);
+        LOGGER.info("[cc-gametest] light audit: {}", auditSky(world));
+        context.waitTicks(400);
+        LOGGER.info("[cc-gametest] light audit 400 ticks later: {}", auditSky(world));
+    }
+
+    private static String auditSky(TestSingleplayerContext world) {
+        return world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            var sky = level.getChunkSource().getLightEngine().getLayerListener(LightLayer.SKY);
+            java.util.List<String> examples = new java.util.ArrayList<>();
+            int badWithData = 0;
+            int badNoData = 0;
+            int checked = 0;
+            int bad = 0;
+            java.util.Map<Integer, Integer> badByY = new java.util.TreeMap<>();
+            BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+            for (int x = -96; x <= 96; x++) {
+                for (int z = -96; z <= 96; z++) {
+                    for (int y = -64; y <= 64; y++) {
+                        var state = level.getBlockState(pos.set(x, y, z));
+                        if (state.getLightDampening() < 15) {
+                            continue;
+                        }
+                        checked++;
+                        if (level.getBrightness(LightLayer.SKY, pos) == 15) {
+                            bad++;
+                            badByY.merge(y, 1, Integer::sum);
+                            boolean hasData = sky.getDataLayerData(SectionPos.of(pos)) != null;
+                            if (hasData) badWithData++; else badNoData++;
+                            if (examples.size() < 6 && y == 0) {
+                                StringBuilder e = new StringBuilder(pos.toShortString() + " sections");
+                                for (int sy = -3; sy <= 2; sy++) {
+                                    e.append(" ").append(sy).append(sky.getDataLayerData(SectionPos.of(x >> 4, sy, z >> 4)) != null ? "+" : "-");
+                                }
+                                var light = ((io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource) level.getChunkSource()).cc_cubicLight();
+                                e.append(" ").append(light == null ? "" : light.describeSky(x, z));
+                                examples.add(e.toString());
+                            }
+                        }
+                    }
+                }
+            }
+            return bad + " light-stopping blocks with sky 15 of " + checked + " checked (" + badWithData + " in sections with sky data, " + badNoData
+                    + " without), by Y " + badByY + "; at Y 0: " + examples;
+        });
     }
 
     /** The air block above the highest block of x, z below Y 200. */

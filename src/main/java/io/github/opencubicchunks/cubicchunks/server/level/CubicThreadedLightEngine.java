@@ -63,6 +63,10 @@ public interface CubicThreadedLightEngine {
             @Override public void removeSkySourcesBelow(int x, int z, int startY) {
                 CubeLightEngine.removeSkySourcesBelowNow(cc_engine(), x, z, startY);
             }
+
+            @Override public void removeSkyLightWithin(int x, int z, int topY, int bottomY) {
+                CubeLightEngine.removeSkyLightWithinNow(cc_engine(), x, z, topY, bottomY);
+            }
         };
     }
 }

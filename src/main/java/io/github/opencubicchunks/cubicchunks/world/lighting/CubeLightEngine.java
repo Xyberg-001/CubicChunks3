@@ -34,6 +34,13 @@ public interface CubeLightEngine {
         SkySourceRemoval.removeBelow(engine, x, z, startY);
     }
 
+    /** See {@link SkySourceRemoval#removeWithin}: only where the engine's updates run, so not for queued calls. */
+    void removeSkyLightWithin(int x, int z, int topY, int bottomY);
+
+    static void removeSkyLightWithinNow(LevelLightEngine engine, int x, int z, int topY, int bottomY) {
+        SkySourceRemoval.removeWithin(engine, x, z, topY, bottomY);
+    }
+
     static CubeLightEngine of(LevelLightEngine engine) {
         return new CubeLightEngine() {
             @Override public void updateSectionStatus(SectionPos pos, boolean empty) {
@@ -62,6 +69,10 @@ public interface CubeLightEngine {
 
             @Override public void removeSkySourcesBelow(int x, int z, int startY) {
                 SkySourceRemoval.removeBelow(engine, x, z, startY);
+            }
+
+            @Override public void removeSkyLightWithin(int x, int z, int topY, int bottomY) {
+                SkySourceRemoval.removeWithin(engine, x, z, topY, bottomY);
             }
         };
     }

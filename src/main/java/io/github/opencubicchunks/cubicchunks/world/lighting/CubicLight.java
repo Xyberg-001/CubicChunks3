@@ -46,6 +46,8 @@ public final class CubicLight {
      * A cube is ready for light (it arrived, or reached its light step). Its non-empty sections join the light engine's storage (the server
      * did that in the cube's initializeLight step already), and then:
      * <ul>
+     * <li>full sky light in the cube below where its column's sky starts is taken back: vanilla never has it there, but a cube lit while
+     * it was the top of its column holds it until the cubes above arrive, and may be saved with it before they do;</li>
      * <li>the sky light under any column the cube roofs over is taken back (lit while the cube was not there, as open to the sky; see
      * {@link SkySourceRemoval});</li>
      * <li>a cube with saved light ({@code lighted}) keeps it, as vanilla keeps a chunk's: the light was worked out when what lay around and
@@ -66,6 +68,7 @@ public final class CubicLight {
             }
         }
         int cubeMinY = cubePos.minCubeY();
+        int cubeMaxY = cubePos.maxCubeY();
         for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
             for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
                 int chunkX = Coords.cubeToSection(cubePos.getX(), dx);
@@ -76,7 +79,12 @@ public final class CubicLight {
                 int minZ = SectionPos.sectionToBlockCoord(chunkZ);
                 for (int z = 0; z < 16; z++) {
                     for (int x = 0; x < 16; x++) {
-                        if (sources.getLowestSourceY(x, z) >= cubeMinY) {
+                        int lowestSourceY = sources.getLowestSourceY(x, z);
+                        // full sky light under where the sky starts is never right: take back any the cube holds (see SkySourceRemoval)
+                        if (lowestSourceY > cubeMinY) { // (a column open all the way down has its sources at Integer.MIN_VALUE)
+                            engine.removeSkyLightWithin(minX + x, minZ + z, Math.min(lowestSourceY - 1, cubeMaxY), cubeMinY);
+                        }
+                        if (lowestSourceY >= cubeMinY) {
                             // the sky now stops in this cube (or at its top): whatever below was lit as open sky is not
                             engine.removeSkySourcesBelow(minX + x, minZ + z, cubeMinY - 1);
                         }
