@@ -83,7 +83,7 @@ public interface ClientCubeCache extends CubeSource {
             if (levelchunk != null) {
                 --this.chunkCount;
                 this.tracking().cc_trackCube(levelchunk, false);
-//                this.level.unload(levelchunk); // TODO P2
+                ((CubicClientLevel) this.level).cc_onCubeUnloaded(levelchunk);
             }
 
             if (chunk != null) {
@@ -96,9 +96,8 @@ public interface ClientCubeCache extends CubeSource {
             if (this.chunks.compareAndSet(chunkIndex, chunk, null)) {
                 this.chunkCount--;
                 this.tracking().cc_trackCube(chunk, false);
+                ((CubicClientLevel) this.level).cc_onCubeUnloaded(chunk);
             }
-
-//            this.level.unload(chunk); // TODO P2
         }
 
         /** New packet data for a cube already held: its sections may have filled or emptied. */

@@ -49,6 +49,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("scheduled")) scheduledTicks(context, world);
             if (stage("audit")) lightAudit(context, world);
             if (stage("difficulty")) regionalDifficulty(context, world);
+            if (stage("cliententities")) clientEntities(context, world);
         }
     }
 
@@ -371,6 +372,52 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             var difficulty = level.getCurrentDifficultyAt(pos);
             return "inhabited " + io.github.opencubicchunks.cubicchunks.server.level.CubicInhabitedTime.at(level, pos) + " ticks, local difficulty "
                     + String.format(java.util.Locale.ROOT, "%.3f", difficulty.getEffectiveDifficulty()) + " (game time " + level.getGameTime() + ")";
+        });
+    }
+
+    /**
+     * Entities tick on the client where it holds their cube (before, a cubic client held no columns and ticked no entity but the player):
+     * a pig on a platform at Y 1000 ticks on the client while the player is up there, is not sent while the player is on the ground below,
+     * and ticks again once the player is back. Client entities count ticks only when ticked.
+     */
+    private static void clientEntities(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("tp @a 0 1010 0");
+        context.waitTicks(LOAD_TICKS);
+        world.getServer().runCommand("fill 20 999 20 26 999 26 minecraft:stone");
+        world.getServer().runCommand("summon minecraft:pig 23 1000 23 {NoAI:1b,PersistenceRequired:1b}");
+        context.waitTicks(LOAD_TICKS / 2);
+        LOGGER.info("[cc-gametest] client entities: up {}", pigOnClient(context));
+        world.getServer().runCommand("tp @a 23 40 23");
+        context.waitTicks(LOAD_TICKS);
+        LOGGER.info("[cc-gametest] client entities: on the ground {}", pigOnClient(context));
+        world.getServer().runCommand("tp @a 23 1010 23");
+        context.waitTicks(LOAD_TICKS);
+        LOGGER.info("[cc-gametest] client entities: up again {}", pigOnClient(context));
+    }
+
+    private static String pigOnClient(ClientGameTestContext context) {
+        int[] before = context.computeOnClient(mc -> {
+            for (var entity : mc.level.entitiesForRendering()) {
+                if (entity.getType() == net.minecraft.world.entity.EntityTypes.PIG && entity.getY() > 990) {
+                    return new int[] { entity.getId(), entity.tickCount };
+                }
+            }
+            return null;
+        });
+        if (before == null) {
+            return "pig not on the client; " + context.computeOnClient(mc -> mc.level.gatherChunkSourceStats());
+        }
+        context.waitTicks(20);
+        return context.computeOnClient(mc -> {
+            var pig = mc.level.getEntity(before[0]);
+            if (pig == null) {
+                return "pig gone from the client";
+            }
+            var cubes = (io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource) mc.level.getChunkSource();
+            var cubePos = io.github.opencubicchunks.cc_core.api.CubePos.from(pig.blockPosition());
+            boolean held = cubes.cc_getCube(cubePos.getX(), cubePos.getY(), cubePos.getZ(), net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) != null;
+            return "pig at " + pig.blockPosition().toShortString() + ", its cube held " + held + ", ticked " + (pig.tickCount - before[1]) + " times in 20 ticks; "
+                    + mc.level.gatherChunkSourceStats();
         });
     }
 

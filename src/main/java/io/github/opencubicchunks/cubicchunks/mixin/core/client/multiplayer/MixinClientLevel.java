@@ -1,5 +1,13 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.client.multiplayer;
 
+import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
+import io.github.opencubicchunks.cubicchunks.world.level.entity.CubicEntitySections;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.entity.TransientEntitySectionManager;
+import net.minecraft.world.level.entity.Visibility;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.CubicClientLevel;
@@ -13,15 +21,28 @@ import org.spongepowered.asm.mixin.Shadow;
 @Mixin(ClientLevel.class)
 public abstract class MixinClientLevel extends MixinLevel implements CubicClientLevel {
     @Shadow @Final private ClientChunkCache chunkSource;
+    @Shadow @Final private TransientEntitySectionManager<Entity> entityStorage;
 
     @Override public boolean cc_hasCube(int cubeX, int cubeY, int cubeZ) {
         return true;
     }
 
-    // TODO should eventually be DASM once BlockTintCache and entity storage are actually done in CC
-    public void cc_onCubeLoaded(CubePos cubePos) {
-//        this.tintCaches.forEach((p_194154_, p_194155_) -> p_194155_.invalidateForChunk(chunkPos.x, chunkPos.z));
-//        this.entityStorage.startTicking(chunkPos);
+    /** The client's entities tick cube by cube in a cubic level (see MixinTransientEntitySectionManager). */
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void cc_cubicEntities(CallbackInfo ci) {
+        if (this.cc_isCubic) {
+            ((CubicEntitySections.Manager) this.entityStorage).cc_makeCubic();
+        }
+    }
+
+    // TODO tint caches (vanilla's onChunkLoaded invalidates them for the chunk)
+    @Override public void cc_onCubeLoaded(CubePos cubePos) {
+        ((CubicEntitySections.Manager) this.entityStorage).cc_updateCubeStatus(cubePos, Visibility.TICKING);
+    }
+
+    @Override public void cc_onCubeUnloaded(LevelCube cube) {
+        cube.clearAllBlockEntities();
+        ((CubicEntitySections.Manager) this.entityStorage).cc_updateCubeStatus(cube.cc_getCubePos(), Visibility.TRACKED);
     }
 
     @Override public ClientCubeCache cc_getCubeSource() {
