@@ -142,5 +142,15 @@ public abstract class MixinGenerationChunkHolder implements GenerationCloHolder 
     @TransformFromMethod(owner = @Ref(GenerationChunkHolder.class), value = "getPos()Lnet/minecraft/world/level/ChunkPos;")
     public native CubePos cc_getCubePos();
 
-    // TODO getLatestStatus - only used for vanilla debug code
+    // 26.3's level-load counter (ChunkLoadCounter) asks every holder for its latest status, cube holders included
+    @AddTransformToSets(ChunkToCubeSet.GenerationChunkHolder_redirects.class)
+    @TransformFromMethod(owner = @Ref(GenerationChunkHolder.class), value = "getLatestStatus()Lnet/minecraft/world/level/chunk/status/ChunkStatus;")
+    public native @Nullable ChunkStatus cc_getLatestCubeStatus();
+
+    @Inject(method = "getLatestStatus", at = @At("HEAD"), cancellable = true)
+    private void cc_onGetLatestStatus(CallbackInfoReturnable<ChunkStatus> cir) {
+        if (cc_cubePos != null) {
+            cir.setReturnValue(cc_getLatestCubeStatus());
+        }
+    }
 }

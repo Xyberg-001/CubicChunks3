@@ -67,6 +67,11 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
         return y < this.getMinY() || y > this.getMaxY();
     }
 
+    /** 26.x asks the positive question in its bounds checks (isInWorldBounds, isInValidBounds); same answer. */
+    @Override public boolean isInsideBuildHeight(int y) {
+        return !this.isOutsideBuildHeight(y);
+    }
+
     /** Horizontal bounds shrink to what a packed block position holds (see MixinBlockPos), in every world. */
     @ModifyConstant(method = "isInWorldBoundsHorizontal", constant = @Constant(intValue = 30000000))
     private static int cc_horizontalBound(int bound) {

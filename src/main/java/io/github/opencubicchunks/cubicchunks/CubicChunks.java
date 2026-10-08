@@ -10,6 +10,8 @@ import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ChunkMap;
 import io.github.opencubicchunks.cubicchunks.network.CCNetworkHandler;
+import io.github.opencubicchunks.cubicchunks.server.commands.CubicForceLoadCommand;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.api.ModInitializer;
 
 /** The mod's entry point on both sides. */
@@ -45,6 +47,7 @@ public class CubicChunks extends CubicChunksBase implements ModInitializer {
         }
 
         CCNetworkHandler.register();
+        CommandRegistrationCallback.EVENT.register((dispatcher, registries, environment) -> CubicForceLoadCommand.register(dispatcher));
     }
 
     public static CommonConfig config() {

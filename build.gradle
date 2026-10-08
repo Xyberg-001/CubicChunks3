@@ -88,7 +88,7 @@ loom {
     accessWidenerPath = file("src/main/resources/cubicchunks.accesswidener")
     runs {
         configureEach {
-            vmArgs("-Dmixin.debug.export=true", "-Dmixin.checks.interfaces=true", "-ea")
+            vmArgs("-Dmixin.debug.export=true", "-Dmixin.checks.interfaces=true", "-ea", "-XX:-OmitStackTraceInFastThrow")
         }
     }
 }
