@@ -387,7 +387,6 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
             if (!pendingUnloads.remove(cloPos, holder) || clo == null) {
                 return;
             }
-            chunkTypeCache.remove(cloPos);
             if (clo instanceof LevelCube cube) {
                 cube.setLoaded(false);
                 cc_save(cube);
@@ -404,6 +403,8 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
                 level.unload(column);
             }
             nextChunkSaveTime.remove(cloPos);
+            // only once saved: an unfinished cube's save looks here to learn whether a finished one is on disk (else it reads it back)
+            chunkTypeCache.remove(cloPos);
         }, unloadQueue::add).whenComplete((ignored, throwable) -> {
             if (throwable != null) {
                 CubicChunks.LOGGER.error("Failed to unload {}", CloPos.fromLong(cloPos), throwable);
