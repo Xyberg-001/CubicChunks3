@@ -42,6 +42,8 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             visit(context, world, "y-300", 0, -290, 0,
                     new String[] { "fill -10 -299 -10 10 -280 10 minecraft:air", "fill -10 -300 -10 10 -300 10 minecraft:emerald_block",
                             "setblock 0 -295 3 minecraft:glowstone" });
+            randomTicks(context, world, "ticks-y1000", 1000, true);
+            randomTicks(context, world, "ticks-y-300", -300, false);
         }
     }
 
@@ -77,6 +79,73 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         context.takeScreenshot("cc-night");
         world.getServer().runCommand("gamemode spectator @a");
         world.getServer().runCommand("time set noon");
+    }
+
+    /**
+     * Random ticks in cubes outside the old height range, raining, at a high tick speed: grass spreading over dirt, wheat growing, and (in the
+     * open sky at Y 1000, cold that high) water freezing and snow settling; under a glowstone ceiling at Y -300 there should be no snow or ice.
+     */
+    private static void randomTicks(ClientGameTestContext context, TestSingleplayerContext world, String name, int y, boolean sky) {
+        int x = 40;
+        int z = 40;
+        world.getServer().runCommand("tp @a " + (x + 4) + " " + (y + 12) + " " + (z + 4) + " 0 90");
+        context.waitTicks(LOAD_TICKS);
+        String[] build = {
+            fill(x - 2, y - 1, z - 2, x + 18, y + 6, z + 18, "air"),
+            fill(x - 2, y - 1, z - 2, x + 18, y - 1, z + 18, "stone"),
+            fill(x, y, z, x + 8, y, z + 8, "dirt"),
+            "setblock " + (x + 4) + " " + y + " " + (z + 4) + " minecraft:grass_block",
+            fill(x + 10, y - 1, z, x + 16, y - 1, z + 6, "water"), // a pool in the floor
+            fill(x, y, z + 10, x + 8, y, z + 10, "farmland"),
+            sky ? "say open sky" : fill(x - 2, y + 2, z - 2, x + 18, y + 2, z + 18, "glowstone"),
+        };
+        for (String command : build) {
+            world.getServer().runCommand(command);
+        }
+        context.waitTicks(20); // the ceiling's light first: wheat placed in the dark breaks at once
+        world.getServer().runCommand(fill(x, y + 1, z + 10, x + 8, y + 1, z + 10, "wheat"));
+        world.getServer().runCommand("weather rain");
+        world.getServer().runCommand("time set noon");
+        world.getServer().runCommand("gamerule random_tick_speed 500");
+        context.waitTicks(300);
+        world.getServer().runCommand("gamerule random_tick_speed 3");
+        world.getServer().runCommand("weather clear");
+        String report = world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            int grass = 0;
+            int snow = 0;
+            int ice = 0;
+            int water = 0;
+            int wheat = 0;
+            int wheatAges = 0;
+            int wheatRipe = 0;
+            BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+            for (int dx = 0; dx <= 16; dx++) {
+                for (int dz = 0; dz <= 10; dz++) {
+                    var state = level.getBlockState(pos.set(x + dx, y, z + dz));
+                    var pool = level.getBlockState(pos.set(x + dx, y - 1, z + dz));
+                    var above = level.getBlockState(pos.set(x + dx, y + 1, z + dz));
+                    if (state.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)) grass++;
+                    if (pool.is(net.minecraft.world.level.block.Blocks.ICE)) ice++;
+                    if (pool.is(net.minecraft.world.level.block.Blocks.WATER)) water++;
+                    if (above.is(net.minecraft.world.level.block.Blocks.SNOW)) snow++;
+                    if (above.is(net.minecraft.world.level.block.Blocks.WHEAT)) {
+                        int age = above.getValue(net.minecraft.world.level.block.CropBlock.AGE);
+                        wheat++;
+                        wheatAges += age;
+                        if (age == 7) wheatRipe++;
+                    }
+                }
+            }
+            return "grass " + grass + "/81, wheat " + wheat + "/9, ripe " + wheatRipe + " (age sum " + wheatAges + "), ice " + ice + " water " + water + " of 49, snow on top "
+                    + snow + ", light at wheat " + level.getMaxLocalRawBrightness(new BlockPos(x + 4, y + 1, z + 10));
+        });
+        LOGGER.info("[cc-gametest] {}: {}", name, report);
+        context.takeScreenshot("cc-" + name);
+    }
+
+    private static String fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {
+        return "fill " + x1 + " " + y1 + " " + z1 + " " + x2 + " " + y2 + " " + z2 + " minecraft:" + block;
     }
 
     /** The loading screen's map over the loaded world: a status view from the integrated server, focused where the player is. */

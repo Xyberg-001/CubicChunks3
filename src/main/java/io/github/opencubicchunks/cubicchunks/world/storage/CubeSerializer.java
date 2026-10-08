@@ -16,6 +16,7 @@ import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.ImposterProtoCube;
+import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSections;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.ProtoCube;
 import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
@@ -184,7 +185,7 @@ public final class CubeSerializer {
         if (lightCorrect) {
             LevelLightEngine lightEngine = level.getChunkSource().getLightEngine();
             for (int i = 0; i < sections.length; i++) {
-                SectionPos sectionPos = sectionPosOf(pos, i);
+                SectionPos sectionPos = CubeSections.sectionPosOf(pos, i);
                 DataLayer block = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
                 DataLayer sky = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
                 blockLight[i] = block == null ? null : block.copy();
@@ -260,7 +261,7 @@ public final class CubeSerializer {
             }
             LevelLightEngine lightEngine = level.getChunkSource().getLightEngine();
             for (int i = 0; i < CubicConstants.SECTION_COUNT; i++) {
-                SectionPos sectionPos = sectionPosOf(at, i);
+                SectionPos sectionPos = CubeSections.sectionPosOf(at, i);
                 if (blockLight[i] != null) {
                     lightEngine.queueSectionData(LightLayer.BLOCK, sectionPos, blockLight[i]);
                 }
@@ -337,20 +338,6 @@ public final class CubeSerializer {
 
     private static @Nullable DataLayer lightLayer(byte[] data) {
         return data.length == DataLayer.SIZE ? new DataLayer(data) : null;
-    }
-
-    /** The section at index i of a cube's sections, as Coords.sectionToIndex numbers them. */
-    private static SectionPos sectionPosOf(CubePos cube, int i) {
-        for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
-            for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
-                for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
-                    if (Coords.sectionToIndex(dx, dy, dz) == i) {
-                        return SectionPos.of(Coords.cubeToSection(cube.getX(), dx), Coords.cubeToSection(cube.getY(), dy), Coords.cubeToSection(cube.getZ(), dz));
-                    }
-                }
-            }
-        }
-        throw new IllegalArgumentException("No section " + i + " in a cube");
     }
 
     private static @Nullable LevelCube.PostLoadProcessor postLoad(ServerLevel level, List<CompoundTag> blockEntities) {

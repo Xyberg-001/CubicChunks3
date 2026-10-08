@@ -5,6 +5,8 @@ import io.github.opencubicchunks.cubicchunks.world.level.entity.CubicEntitySecti
 import java.util.List;
 import java.util.concurrent.Executor;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import io.github.notstirred.dasm.api.annotations.Dasm;
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddMethodToSets;
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddTransformToSets;
@@ -15,12 +17,14 @@ import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicServerLevel;
 import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache;
+import io.github.opencubicchunks.cubicchunks.world.level.CubicRandomTicks;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.entity.PersistentEntitySectionManager;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.entity.Visibility;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import net.minecraft.world.DifficultyInstance;
@@ -90,7 +94,14 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
 
     @AddMethodToSets(containers = ChunkToCubeSet.ServerLevel_redirects.class, method = "tickChunk(Lnet/minecraft/world/level/chunk/LevelChunk;I)V")
     public void cc_tickCube(LevelCube levelCube, int randomTickSpeed) {
-        // TODO (P2) cube ticking
+        CubicRandomTicks.tickCube((ServerLevel) (Object) this, levelCube, randomTickSpeed);
+    }
+
+    /** A cube gives tickPrecipitation the surface it found itself (see CubicRandomTicks); a cubic column keeps no heightmap to look it up in. */
+    @WrapOperation(method = "tickPrecipitation", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ServerLevel;getHeightmapPos(Lnet/minecraft/world/level/levelgen/Heightmap$Types;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/core/BlockPos;"))
+    private BlockPos cc_cubeSurface(ServerLevel level, Heightmap.Types type, BlockPos pos, Operation<BlockPos> original) {
+        return cc_isCubic ? pos : original.call(level, type, pos);
     }
 
     // TODO (P2) waitForChunkAndEntities
