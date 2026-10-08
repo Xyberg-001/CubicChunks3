@@ -87,16 +87,24 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
         }
     }
 
+    /**
+     * Drops the cube if it is held, in the view or not (vanilla drops only within it): the server forgets cubes as the player leaves them,
+     * after it has moved the view centre, so a forgotten cube is often outside the view and would stay held until a nearer cube took its slot,
+     * keeping its sections built in a renderer that meshes them (Sodium). The slot is checked to hold that very cube.
+     */
     @Override public void cc_drop(CubePos chunkPos) {
-        if (this.cc_cubeStorage.inRange(chunkPos.getX(), chunkPos.getY(), chunkPos.getZ())) {
-            int i = this.cc_cubeStorage.getIndex(chunkPos.getX(), chunkPos.getY(), chunkPos.getZ());
-            LevelCube levelCube = this.cc_cubeStorage.getChunk(i);
-            if (cc_isValidCube(levelCube, chunkPos.getX(), chunkPos.getY(), chunkPos.getZ())) {
-                // TODO event hook
-//                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new net.neoforged.neoforge.event.level.ChunkEvent.Unload(levelCube));
-                this.cc_cubeStorage.drop(i, levelCube);
-            }
+        int i = this.cc_cubeStorage.getIndex(chunkPos.getX(), chunkPos.getY(), chunkPos.getZ());
+        LevelCube levelCube = this.cc_cubeStorage.getChunk(i);
+        if (cc_isValidCube(levelCube, chunkPos.getX(), chunkPos.getY(), chunkPos.getZ())) {
+            // TODO event hook
+//            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new net.neoforged.neoforge.event.level.ChunkEvent.Unload(levelCube));
+            this.cc_cubeStorage.drop(i, levelCube);
         }
+    }
+
+    @Override public @Nullable LevelCube cc_getHeldCube(int x, int y, int z) {
+        LevelCube levelCube = this.cc_cubeStorage.getChunk(this.cc_cubeStorage.getIndex(x, y, z));
+        return cc_isValidCube(levelCube, x, y, z) ? levelCube : null;
     }
 
     @Override public @Nullable LevelCube cc_getCube(int chunkX, int chunkY, int chunkZ, ChunkStatus requiredStatus, boolean load) {

@@ -79,6 +79,13 @@ mixinGen {
         it.conformVisibility = true
         it.injectorsDefaultRequire = 1
     }
+    // compatibility with Sodium's renderer; applied only when Sodium is installed (SodiumMixinPlugin)
+    config(sourceSets.main, "sodium") {
+        it.required = false
+        it.conformVisibility = true
+        it.injectorsDefaultRequire = 1
+        it.configurationPlugin = "io.github.opencubicchunks.cubicchunks.mixin.SodiumMixinPlugin"
+    }
     config(sourceSets.test, "test") {
         it.required = true
         it.conformVisibility = true
@@ -121,6 +128,10 @@ repositories {
     maven { setUrl("https://maven.daporkchop.net/") }
     maven { setUrl("https://oss.sonatype.org/content/repositories/snapshots/") }
     maven { setUrl("https://jitpack.io") }
+    exclusiveContent {
+        forRepository { maven { setUrl("https://api.modrinth.com/maven") } }
+        filter { includeGroup("maven.modrinth") }
+    }
 }
 
 dependencies {
@@ -148,6 +159,16 @@ dependencies {
     implementation(include("com.electronwill.night-config:toml:3.8.2"))
     implementation(include("io.github.opencubicchunks:regionlib:0.63.0-SNAPSHOT"))
     implementation(include("org.spongepowered:noise:2.0.0-SNAPSHOT"))
+
+    // Sodium (PolyForm Shield): compiled against for the compatibility mixins, never bundled
+    compileOnly("maven.modrinth:sodium:${sodium_version}")
+    // ./gradlew runClient/runClientGameTest -PwithSodium runs the game with Sodium; -PextraMods=<folder> adds the mod jars in a folder
+    if (project.hasProperty("withSodium")) {
+        localRuntime("maven.modrinth:sodium:${sodium_version}")
+    }
+    if (project.hasProperty("extraMods")) {
+        localRuntime(fileTree(dir: project.property("extraMods"), include: "*.jar"))
+    }
 }
 
 processResources {

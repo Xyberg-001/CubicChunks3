@@ -52,6 +52,12 @@ public interface ClientCubeCache extends CubeSource {
 
     int cc_cubeViewRadius();
 
+    /**
+     * The cube if the client holds it, wherever the view centre is: a cube the camera moved away from stays held until the server forgets
+     * it or a cube nearer takes its slot (cc_getCube only answers within the view).
+     */
+    @Nullable LevelCube cc_getHeldCube(int x, int y, int z);
+
     // Fields and methods on this are public so they can be accessed from MixinClientChunkCache and tests; they should not be used anywhere else
     // (This has to be here since we can't add inner classes with mixin)
     @Dasm(ChunkToCubeSet.class)

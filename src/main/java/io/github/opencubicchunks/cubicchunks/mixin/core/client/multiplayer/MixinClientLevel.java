@@ -1,6 +1,10 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.client.multiplayer;
 
+import javax.annotation.Nullable;
+
 import io.github.opencubicchunks.cubicchunks.client.color.block.CubicBlockTintCache;
+import io.github.opencubicchunks.cubicchunks.client.render.CubeRenderReadiness;
+import io.github.opencubicchunks.cubicchunks.client.render.SodiumCubes;
 import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
 import net.minecraft.client.color.block.BlockTintCache;
 import net.minecraft.world.level.ColorResolver;
@@ -21,6 +25,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 @Mixin(ClientLevel.class)
 public abstract class MixinClientLevel extends MixinLevel implements CubicClientLevel {
@@ -33,22 +38,37 @@ public abstract class MixinClientLevel extends MixinLevel implements CubicClient
     }
 
     /** The client's entities tick cube by cube in a cubic level (see MixinTransientEntitySectionManager). */
+    @Unique private @Nullable CubeRenderReadiness cc_renderReadiness;
+
     @Inject(method = "<init>", at = @At("RETURN"))
     private void cc_cubicEntities(CallbackInfo ci) {
         if (this.cc_isCubic) {
             ((CubicEntitySections.Manager) this.entityStorage).cc_makeCubic();
+            if (SodiumCubes.SODIUM) {
+                this.cc_renderReadiness = new CubeRenderReadiness();
+            }
         }
+    }
+
+    @Override public @Nullable CubeRenderReadiness cc_renderReadiness() {
+        return this.cc_renderReadiness;
     }
 
     /** As vanilla's onChunkLoaded: biome colours worked out before the cube's biomes arrived go (see CubicBlockTintCache). */
     @Override public void cc_onCubeLoaded(CubePos cubePos) {
         this.tintCaches.forEach((resolver, cache) -> ((CubicBlockTintCache) cache).cc_invalidateForCube(cubePos));
         ((CubicEntitySections.Manager) this.entityStorage).cc_updateCubeStatus(cubePos, Visibility.TICKING);
+        if (this.cc_renderReadiness != null) {
+            this.cc_renderReadiness.onCubeHeld(cubePos.getX(), cubePos.getY(), cubePos.getZ());
+        }
     }
 
     @Override public void cc_onCubeUnloaded(LevelCube cube) {
         cube.clearAllBlockEntities();
         ((CubicEntitySections.Manager) this.entityStorage).cc_updateCubeStatus(cube.cc_getCubePos(), Visibility.TRACKED);
+        if (this.cc_renderReadiness != null) {
+            this.cc_renderReadiness.onCubeDropped(cube.cc_getCubePos().getX(), cube.cc_getCubePos().getY(), cube.cc_getCubePos().getZ());
+        }
     }
 
     @Override public ClientCubeCache cc_getCubeSource() {

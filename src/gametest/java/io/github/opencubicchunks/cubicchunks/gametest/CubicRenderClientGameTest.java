@@ -61,6 +61,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("lightsync")) lightSync(context, world);
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
+            if (stage("shaders")) shaders(context, world);
         }
         if (stage("vanillaworld")) vanillaWorld(context);
         if (stage("worldheight")) worldHeight(context);
@@ -134,6 +135,63 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             });
             LOGGER.info("[cc-gametest] world height: {}; {}", server, client);
             context.takeScreenshot("cc-world-height");
+        }
+    }
+
+    /**
+     * With Iris installed and CC_SHADERPACK naming a shader pack zip: the pack switched on, the old surface and the platform at Y 1000 seen
+     * through it, then shaders off again. Iris draws terrain through Sodium, its shadow pass included.
+     */
+    private static void shaders(ClientGameTestContext context, TestSingleplayerContext world) {
+        String pack = System.getenv("CC_SHADERPACK");
+        if (pack == null || pack.isBlank()) {
+            LOGGER.info("[cc-gametest] shaders: CC_SHADERPACK not set, skipped");
+            return;
+        }
+        if (!setShaders(context, pack, true)) {
+            return;
+        }
+        context.waitTicks(100);
+        visit(context, world, "shaders-ground", 0, 40, 0, null);
+        visit(context, world, "shaders-y1000", 0, 1010, 0, null);
+        setShaders(context, pack, false);
+    }
+
+    /** Switches Iris shaders on with the pack (copied into the shader pack folder) or off, through Iris's own config. */
+    private static boolean setShaders(ClientGameTestContext context, String pack, boolean on) {
+        return context.computeOnClient(mc -> {
+            try {
+                Class<?> iris = Class.forName("net.irisshaders.iris.Iris");
+                java.nio.file.Path source = java.nio.file.Path.of(pack);
+                java.nio.file.Path folder = (java.nio.file.Path) iris.getMethod("getShaderpacksDirectory").invoke(null);
+                java.nio.file.Files.createDirectories(folder);
+                java.nio.file.Files.copy(source, folder.resolve(source.getFileName()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                Object config = iris.getMethod("getIrisConfig").invoke(null);
+                config.getClass().getMethod("setShaderPackName", String.class).invoke(config, source.getFileName().toString());
+                config.getClass().getMethod("setShadersEnabled", boolean.class).invoke(config, on);
+                config.getClass().getMethod("save").invoke(config);
+                iris.getMethod("reload").invoke(null);
+                LOGGER.info("[cc-gametest] shaders: {} {}", on ? "on with" : "off, was", source.getFileName());
+                return true;
+            } catch (ClassNotFoundException e) {
+                LOGGER.info("[cc-gametest] shaders: Iris not installed, skipped");
+                return false;
+            } catch (ReflectiveOperationException | java.io.IOException e) {
+                LOGGER.error("[cc-gametest] shaders: could not switch shaders", e);
+                return false;
+            }
+        });
+    }
+
+    /** Sodium's own count of the sections it renders, when Sodium is installed (it replaces the sections counted above). */
+    private static String sodiumStats() {
+        try {
+            Object renderer = Class.forName("net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer").getMethod("instanceNullable").invoke(null);
+            return renderer == null ? "; sodium: no renderer" : "; sodium: " + renderer.getClass().getMethod("getChunksDebugString").invoke(renderer);
+        } catch (ClassNotFoundException e) {
+            return "";
+        } catch (ReflectiveOperationException e) {
+            return "; sodium: " + e;
         }
     }
 
@@ -727,7 +785,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         }
         BlockPos below = new BlockPos(x, y - 10, z);
         String stats = context.computeOnClient(mc -> stats(mc, below));
-        LOGGER.info("[cc-gametest] {}: {}", name, stats);
+        LOGGER.info("[cc-gametest] {}: {}{}", name, stats, context.computeOnClient(mc -> sodiumStats()));
         context.takeScreenshot("cc-" + name);
     }
 
