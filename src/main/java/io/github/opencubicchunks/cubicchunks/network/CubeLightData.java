@@ -29,16 +29,26 @@ public record CubeLightData(int sectionMask, @Nullable DataLayer[] sky, @Nullabl
 
     /** The light engine's layers for the cube's sections in the mask (from the server thread, as vanilla reads them for its packets). */
     public static CubeLightData of(LevelLightEngine engine, CubePos cubePos, int sectionMask) {
+        return of(engine, cubePos, sectionMask, sectionMask);
+    }
+
+    /**
+     * Only the sky layers of the sections in skyMask and the block layers of those in blockMask: for a change, where a layer the client
+     * already has is left out (sent as nothing, which the client leaves as it is).
+     */
+    public static CubeLightData of(LevelLightEngine engine, CubePos cubePos, int skyMask, int blockMask) {
         DataLayer[] sky = new DataLayer[CubicConstants.SECTION_COUNT];
         DataLayer[] block = new DataLayer[CubicConstants.SECTION_COUNT];
         for (int i = 0; i < CubicConstants.SECTION_COUNT; i++) {
-            if ((sectionMask & (1 << i)) != 0) {
-                SectionPos sectionPos = CubeSections.sectionPosOf(cubePos, i);
+            SectionPos sectionPos = CubeSections.sectionPosOf(cubePos, i);
+            if ((skyMask & (1 << i)) != 0) {
                 sky[i] = copy(engine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos));
+            }
+            if ((blockMask & (1 << i)) != 0) {
                 block[i] = copy(engine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos));
             }
         }
-        return new CubeLightData(sectionMask, sky, block);
+        return new CubeLightData(skyMask | blockMask, sky, block);
     }
 
     private static @Nullable DataLayer copy(@Nullable DataLayer layer) {

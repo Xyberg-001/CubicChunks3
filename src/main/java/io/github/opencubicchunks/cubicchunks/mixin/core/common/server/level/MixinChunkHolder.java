@@ -155,8 +155,9 @@ public abstract class MixinChunkHolder extends MixinGenerationChunkHolder implem
 
     /** Vanilla's light part of broadcastChanges, for a cube: every player tracking it gets the changed sections (see the packet). */
     @Unique private void cc_broadcastCubeLight(LevelCube cube) {
-        int changed = this.cc_skyLightChanged | this.cc_blockLightChanged;
-        if (changed == 0) {
+        int skyChanged = this.cc_skyLightChanged;
+        int blockChanged = this.cc_blockLightChanged;
+        if ((skyChanged | blockChanged) == 0) {
             return;
         }
         this.cc_skyLightChanged = 0;
@@ -164,7 +165,7 @@ public abstract class MixinChunkHolder extends MixinGenerationChunkHolder implem
         List<ServerPlayer> players = this.cc_playerProvider.cc_getPlayers(cc_cubePos, false);
         if (!players.isEmpty()) {
             CCClientboundCubeLightUpdatePacket packet = new CCClientboundCubeLightUpdatePacket(cc_cubePos,
-                    CubeLightData.of(cube.getLevel().getLightEngine(), cc_cubePos, changed));
+                    CubeLightData.of(cube.getLevel().getLightEngine(), cc_cubePos, skyChanged, blockChanged));
             for (ServerPlayer player : players) {
                 ServerPlayNetworking.send(player, packet);
             }
