@@ -1,6 +1,6 @@
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
-package io.github.opencubicchunks.cubicchunks.client.lighting;
+package io.github.opencubicchunks.cubicchunks.world.lighting;
 
 import javax.annotation.ParametersAreNonnullByDefault;
 

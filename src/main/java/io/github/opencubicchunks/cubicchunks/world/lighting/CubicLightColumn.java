@@ -1,4 +1,4 @@
-package io.github.opencubicchunks.cubicchunks.client.lighting;
+package io.github.opencubicchunks.cubicchunks.world.lighting;
 
 import java.util.function.BiConsumer;
 
@@ -7,7 +7,7 @@ import javax.annotation.Nullable;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
-import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
+import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -19,20 +19,20 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 
 /**
- * One 16x16 column of a cubic level as the light engine sees it: blocks come from whichever cube holds them (air where none is held), light
- * sources from the held cubes of the column, and sky sources from {@link CubicSkyLightSources}.
+ * One 16x16 column of a cubic level as the light engine sees it: blocks come from whichever cube holds them (air where none is given), light
+ * sources from the column's cubes, and sky sources from {@link CubicSkyLightSources}.
  */
 public final class CubicLightColumn implements LightChunk {
-    private final CubicClientLight light;
+    private final CubeLightView view;
     private final int chunkX;
     private final int chunkZ;
     private final CubicSkyLightSources skyLightSources;
 
-    CubicLightColumn(CubicClientLight light, int chunkX, int chunkZ) {
-        this.light = light;
+    CubicLightColumn(CubeLightView view, int chunkX, int chunkZ) {
+        this.view = view;
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
-        this.skyLightSources = new CubicSkyLightSources(light.level(), light, chunkX, chunkZ);
+        this.skyLightSources = new CubicSkyLightSources(view, chunkX, chunkZ);
     }
 
     CubicSkyLightSources sources() {
@@ -46,18 +46,13 @@ public final class CubicLightColumn implements LightChunk {
     @Override public void findBlockLightSources(BiConsumer<BlockPos, BlockState> output) {
         int cubeX = Coords.blockToCube(Coords.sectionToMinBlock(this.chunkX));
         int cubeZ = Coords.blockToCube(Coords.sectionToMinBlock(this.chunkZ));
-        int sectionInCubeX = Coords.cubeLocalSection(this.chunkX);
-        int sectionInCubeZ = Coords.cubeLocalSection(this.chunkZ);
-        for (int cubeY = this.light.bottomCubeY(); cubeY <= this.light.topCubeY(); cubeY++) {
-            LevelCube cube = this.light.cube(cubeX, cubeY, cubeZ);
-            if (cube != null) {
-                findSources(cube, sectionInCubeX, sectionInCubeZ, output);
-            }
+        for (CubeAccess cube : this.view.cubesTopDown(cubeX, cubeZ)) {
+            findSources(cube, Coords.cubeLocalSection(this.chunkX), Coords.cubeLocalSection(this.chunkZ), output);
         }
     }
 
     /** The light sources in this column's part of one cube (vanilla's ChunkAccess.findBlockLightSources, for a cube's sections). */
-    static void findSources(LevelCube cube, int sectionInCubeX, int sectionInCubeZ, BiConsumer<BlockPos, BlockState> output) {
+    private static void findSources(CubeAccess cube, int sectionInCubeX, int sectionInCubeZ, BiConsumer<BlockPos, BlockState> output) {
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         LevelChunkSection[] sections = cube.getSections();
         int minX = cube.cc_getCubePos().minCubeX() + sectionInCubeX * 16;
@@ -82,12 +77,12 @@ public final class CubicLightColumn implements LightChunk {
     }
 
     @Override public BlockState getBlockState(BlockPos pos) {
-        LevelCube cube = this.light.cube(Coords.blockToCube(pos.getX()), Coords.blockToCube(pos.getY()), Coords.blockToCube(pos.getZ()));
+        CubeAccess cube = this.view.cube(Coords.blockToCube(pos.getX()), Coords.blockToCube(pos.getY()), Coords.blockToCube(pos.getZ()));
         return cube == null ? Blocks.AIR.defaultBlockState() : cube.getBlockState(pos);
     }
 
     @Override public FluidState getFluidState(BlockPos pos) {
-        LevelCube cube = this.light.cube(Coords.blockToCube(pos.getX()), Coords.blockToCube(pos.getY()), Coords.blockToCube(pos.getZ()));
+        CubeAccess cube = this.view.cube(Coords.blockToCube(pos.getX()), Coords.blockToCube(pos.getY()), Coords.blockToCube(pos.getZ()));
         return cube == null ? Fluids.EMPTY.defaultFluidState() : cube.getFluidState(pos);
     }
 

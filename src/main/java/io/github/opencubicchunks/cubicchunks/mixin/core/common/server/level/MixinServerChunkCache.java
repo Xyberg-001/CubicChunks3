@@ -26,10 +26,14 @@ import io.github.opencubicchunks.cubicchunks.mixin.core.common.world.level.chunk
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.GlobalSet;
+import io.github.opencubicchunks.cubicchunks.server.level.CubicThreadedLightEngine;
 import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache;
+import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeLightView;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubeLightEngine;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -39,6 +43,7 @@ import net.minecraft.server.level.ChunkResult;
 import net.minecraft.server.level.DistanceManager;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ThreadedLevelLightEngine;
 import net.minecraft.server.level.Ticket;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -111,6 +116,24 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
     ) {
         if (((CanBeCubic) level).cc_isCubic()) {
             this.cc_setCubic();
+            this.cc_light = new CubicLight(new ServerCubeLightView(level, this::getVisibleChunkIfPresent),
+                    () -> ((CubicThreadedLightEngine) this.getLightEngine()).cc_onLightThread(), () -> CubeLightEngine.of(this.getLightEngine()));
+        }
+    }
+
+    private @Nullable CubicLight cc_light;
+
+    @Shadow public abstract ThreadedLevelLightEngine getLightEngine();
+
+    @Override public @Nullable CubicLight cc_cubicLight() {
+        return this.cc_light;
+    }
+
+    /** In a cubic level the light engine reads columns made of the held cubes (see CubicLight). */
+    @Inject(method = "getChunkForLighting", at = @At("HEAD"), cancellable = true)
+    private void cc_cubicColumnForLighting(int x, int z, CallbackInfoReturnable<LightChunk> cir) {
+        if (this.cc_light != null) {
+            cir.setReturnValue(this.cc_light.column(x, z));
         }
     }
 

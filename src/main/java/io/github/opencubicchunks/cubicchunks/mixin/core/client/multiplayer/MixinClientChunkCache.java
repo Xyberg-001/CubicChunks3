@@ -15,14 +15,16 @@ import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
-import io.github.opencubicchunks.cubicchunks.client.lighting.CubicClientLight;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache;
+import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeLightView;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.CubicClientLevel;
 import io.github.opencubicchunks.cubicchunks.mixin.access.client.ClientChunkCache$StorageAccess;
 import io.github.opencubicchunks.cubicchunks.mixin.core.common.world.level.chunk.MixinChunkSource;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.EmptyLevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubeLightEngine;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -56,7 +58,7 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
 
     private LevelCube cc_emptyCube;
 
-    private @Nullable CubicClientLight cc_light;
+    private @Nullable CubicLight cc_light;
 
     @Shadow @Final ClientLevel level;
 
@@ -69,7 +71,8 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
             cc_emptyCube = new EmptyLevelCube(level, CubePos.of(0, 0, 0),
                     level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.PLAINS));
             cc_cubeStorage = new ClientCubeCache.Storage(calculateStorageRange(viewDistance), level);
-            cc_light = new CubicClientLight(level, this);
+            cc_light = new CubicLight(new ClientCubeLightView(level, this), () -> CubeLightEngine.of(level.getLightEngine()),
+                    () -> CubeLightEngine.of(level.getLightEngine()));
             // TODO we could redirect the initial construction instead of immediately resizing. doesn't really matter
             updateViewRadius(cc_calculateChunkViewDistance(viewDistance));
         }
@@ -218,7 +221,7 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
         return this.cc_cubeStorage.cubeRadius;
     }
 
-    @Override public @Nullable CubicClientLight cc_light() {
+    @Override public @Nullable CubicLight cc_cubicLight() {
         return this.cc_light;
     }
 
@@ -232,11 +235,6 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
         return this.getChunk(x, z, ChunkStatus.EMPTY, false);
     }
 
-    @Override public void cc_onCubeLightPropertiesChanged(BlockPos pos) {
-        if (this.cc_light != null) {
-            this.cc_light.onBlockChanged(pos);
-        }
-    }
 
     @Override public void cc_trackCube(LevelCube cube, boolean loaded) {
         ClientChunkCache$StorageAccess tracking = (ClientChunkCache$StorageAccess) (Object) this.storage;
@@ -250,7 +248,7 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
             tracking.cc_removedLoadedChunks()[buffer].add(cubeNode);
         }
         if (!loaded && this.cc_light != null) {
-            CubicClientLight light = this.cc_light;
+            CubicLight light = this.cc_light;
             this.level.queueLightUpdate(() -> light.onCubeUnloaded(cube));
         }
         CubePos cubePos = cube.cc_getCubePos();

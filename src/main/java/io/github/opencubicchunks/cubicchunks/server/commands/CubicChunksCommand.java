@@ -13,24 +13,27 @@ import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.LightLayer;
 
 /**
  * {@code /cubicchunks forceload add|remove <pos> [<radius>]}: keeps the cubes around a block loaded, the cubic counterpart of vanilla's
  * column-based {@code /forceload}. 26.x has no spawn chunks, so without players this is what holds cubes in memory. The tickets are vanilla
  * FORCED tickets keyed by the cube, so they persist with the level's other tickets. {@code /cubicchunks loaded} reports how many holders are
- * loaded.
+ * loaded, and {@code /cubicchunks light <pos>} the server's light at a block.
  */
-public final class CubicForceLoadCommand {
+public final class CubicChunksCommand {
     private static final int MAX_RADIUS = 4;
     private static final SimpleCommandExceptionType ERROR_NOT_CUBIC = new SimpleCommandExceptionType(
             Component.literal("This dimension does not use cubic chunks; use /forceload"));
 
-    private CubicForceLoadCommand() {}
+    private CubicChunksCommand() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("cubicchunks")
                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(Commands.literal("loaded").executes(c -> loaded(c.getSource())))
+                .then(Commands.literal("light").then(Commands.argument("pos", BlockPosArgument.blockPos())
+                        .executes(c -> light(c.getSource(), BlockPosArgument.getBlockPos(c, "pos")))))
                 .then(Commands.literal("forceload")
                         .then(Commands.literal("add").then(position(true)))
                         .then(Commands.literal("remove").then(position(false)))));
@@ -49,6 +52,16 @@ public final class CubicForceLoadCommand {
         int holders = level.getChunkSource().getLoadedChunksCount();
         source.sendSuccess(() -> Component.literal(holders + " cube and column holders loaded in " + level.dimension().identifier()), false);
         return holders;
+    }
+
+    /** The server's sky and block light at a position (the client works out its own; see CubicLight). */
+    private static int light(CommandSourceStack source, BlockPos pos) {
+        ServerLevel level = source.getLevel();
+        int sky = level.getBrightness(LightLayer.SKY, pos);
+        int block = level.getBrightness(LightLayer.BLOCK, pos);
+        source.sendSuccess(() -> Component.literal("Light at " + pos.toShortString() + ": sky " + sky + ", block " + block + " ("
+                + level.getBlockState(pos).getBlock().getName().getString() + ")"), false);
+        return Math.max(sky, block);
     }
 
     private static int change(CommandSourceStack source, BlockPos pos, int radius, boolean add) throws CommandSyntaxException {

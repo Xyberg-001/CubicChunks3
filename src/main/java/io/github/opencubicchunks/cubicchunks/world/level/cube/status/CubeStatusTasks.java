@@ -1,5 +1,7 @@
 package io.github.opencubicchunks.cubicchunks.world.level.cube.status;
 
+import static io.github.opencubicchunks.cc_core.utils.Coords.cubeToSection;
+
 import java.util.concurrent.CompletableFuture;
 
 import com.mojang.logging.LogUtils;
@@ -9,16 +11,24 @@ import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddMethodToS
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddTransformToSets;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
+import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
+import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
+import io.github.opencubicchunks.cubicchunks.server.level.CubicThreadedLightEngine;
 import io.github.opencubicchunks.cubicchunks.util.StaticCache3D;
 import io.github.opencubicchunks.cubicchunks.world.level.chunk.status.CCChunkStatusTasks;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
+import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ThreadedLevelLightEngine;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.status.ChunkStatusTasks;
 import net.minecraft.world.level.chunk.status.WorldGenContext;
 import net.minecraft.world.level.storage.ValueInput;
@@ -123,7 +133,25 @@ public class CubeStatusTasks {
     public static CompletableFuture<CubeAccess> initializeLight(
             WorldGenContext worldGenContext, CubeStep step, StaticCache3D<GenerationChunkHolder> cache, CubeAccess cube
     ) {
-        return passThrough(worldGenContext, step, cache, cube);
+        // as vanilla's ThreadedLevelLightEngine.initializeLight: the cube's non-empty sections join the light engine's storage, and the step
+        // finishes once the light thread has done that
+        CubicThreadedLightEngine engine = (CubicThreadedLightEngine) worldGenContext.lightEngine();
+        CubePos pos = cube.cc_getCubePos();
+        engine.cc_addTask(cubeToSection(pos.getX(), 0), cubeToSection(pos.getZ(), 0), ThreadedLevelLightEngine.TaskType.PRE_UPDATE, () -> {
+            LevelChunkSection[] sections = cube.getSections();
+            for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
+                for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
+                    for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
+                        if (!sections[Coords.sectionToIndex(dx, dy, dz)].hasOnlyAir()) {
+                            engine.cc_updateSectionStatusNow(SectionPos.of(cubeToSection(pos.getX(), dx), cubeToSection(pos.getY(), dy),
+                                    cubeToSection(pos.getZ(), dz)), false);
+                        }
+                    }
+                }
+            }
+        });
+        return CompletableFuture.supplyAsync(() -> cube,
+                task -> engine.cc_addTask(cubeToSection(pos.getX(), 0), cubeToSection(pos.getZ(), 0), ThreadedLevelLightEngine.TaskType.POST_UPDATE, task));
     }
 
     @AddMethodToSets(containers = ChunkToCubeSet.ChunkStatusTasks_to_CubeStatusTasks_redirects.class, method = "light(Lnet/minecraft/world/level/chunk/status/WorldGenContext;Lnet/minecraft/world/level/chunk/status/ChunkStep;"
@@ -131,7 +159,20 @@ public class CubeStatusTasks {
     public static CompletableFuture<CubeAccess> light(
             WorldGenContext worldGenContext, CubeStep step, StaticCache3D<GenerationChunkHolder> cache, CubeAccess cube
     ) {
-        return passThrough(worldGenContext, step, cache, cube);
+        // as vanilla's ThreadedLevelLightEngine.lightChunk, but always spread: cube light is not saved yet (see CubicLight)
+        CubicThreadedLightEngine engine = (CubicThreadedLightEngine) worldGenContext.lightEngine();
+        CubicLight light = ((CubeSource) worldGenContext.level().getChunkSource()).cc_cubicLight();
+        CubePos pos = cube.cc_getCubePos();
+        int chunkX = cubeToSection(pos.getX(), 0);
+        int chunkZ = cubeToSection(pos.getZ(), 0);
+        cube.setLightCorrect(false);
+        if (light != null) {
+            engine.cc_addTask(chunkX, chunkZ, ThreadedLevelLightEngine.TaskType.PRE_UPDATE, () -> light.onCubeLoaded(cube));
+        }
+        return CompletableFuture.supplyAsync(() -> {
+            cube.setLightCorrect(true);
+            return cube;
+        }, task -> engine.cc_addTask(chunkX, chunkZ, ThreadedLevelLightEngine.TaskType.POST_UPDATE, task));
     }
 
     @AddMethodToSets(containers = ChunkToCubeSet.ChunkStatusTasks_to_CubeStatusTasks_redirects.class, method = "generateSpawn(Lnet/minecraft/world/level/chunk/status/WorldGenContext;Lnet/minecraft/world/level/chunk/status/ChunkStep;"

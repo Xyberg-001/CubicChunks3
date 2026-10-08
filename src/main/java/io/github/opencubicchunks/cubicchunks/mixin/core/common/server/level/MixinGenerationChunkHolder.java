@@ -106,7 +106,7 @@ public abstract class MixinGenerationChunkHolder implements GenerationCloHolder 
 
     @AddTransformToSets(ChunkToCubeSet.GenerationChunkHolder_redirects.class)
     @TransformFromMethod(owner = @Ref(GenerationChunkHolder.class), value = "getChunkIfPresentUnchecked(Lnet/minecraft/world/level/chunk/status/ChunkStatus;)Lnet/minecraft/world/level/chunk/ChunkAccess;")
-    public native @Nullable CubeAccess cc_getCubeIfPresentUnchecked(ChunkStatus status);
+    @Override public native @Nullable CubeAccess cc_getCubeIfPresentUnchecked(ChunkStatus status);
 
     @AddTransformToSets(ChunkToCubeSet.GenerationChunkHolder_redirects.class)
     @TransformFromMethod(owner = @Ref(GenerationChunkHolder.class), value = "getChunkIfPresent(Lnet/minecraft/world/level/chunk/status/ChunkStatus;)Lnet/minecraft/world/level/chunk/ChunkAccess;")

@@ -54,9 +54,11 @@ import io.github.opencubicchunks.cubicchunks.world.level.chunklike.CloAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.ImposterProtoClo;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
+import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStep;
 import io.github.opencubicchunks.cubicchunks.world.level.entity.CloStatusUpdateListener;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
 import io.github.opencubicchunks.cubicchunks.world.storage.CubeSerializer;
 import io.github.opencubicchunks.cubicchunks.world.storage.CubeStorage;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
@@ -358,6 +360,15 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
      * blocks, and columns are not saved yet). Light is left alone: cubes have none yet. Runs from the unload queue, after any save
      * already under way for it.
      */
+    /** As vanilla's scheduleUnload does for a chunk (lightEngine.updateChunkStatus): an unloaded cube's light goes. */
+    private void cc_unlight(CubeAccess cube) {
+        CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+        if (light != null) {
+            light.onCubeUnloaded(cube);
+            level.getChunkSource().getLightEngine().tryScheduleUpdate();
+        }
+    }
+
     @AddMethodToSets(containers = ChunkToCloSet.ChunkMap_redirects.class, method = "scheduleUnload(JLnet/minecraft/server/level/ChunkHolder;)V")
     private void cc_scheduleUnload(long cloPos, ChunkHolder holder) {
         CompletableFuture<?> saveSync = holder.getSaveSyncFuture();
@@ -376,9 +387,11 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
                 cc_save(cube);
                 cube.clearAllBlockEntities();
                 cube.unregisterTickContainerFromLevel(level);
+                cc_unlight(cube);
                 cc_cubesUnloaded.incrementAndGet();
             } else if (clo instanceof CubeAccess cube) {
                 cc_save(cube);
+                cc_unlight(cube);
                 cc_cubesUnloaded.incrementAndGet();
             } else if ((Object) clo instanceof LevelChunk column) {
                 column.setLoaded(false);

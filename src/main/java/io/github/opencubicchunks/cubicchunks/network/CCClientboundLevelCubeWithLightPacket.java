@@ -10,10 +10,10 @@ import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CubicChunks;
-import io.github.opencubicchunks.cubicchunks.client.lighting.CubicClientLight;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
+import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -64,7 +64,7 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
                 LevelCube levelCube = ((CubeSource) level.getChunkSource()).cc_getCube(x, y, z, false);
                 if (levelCube != null) {
                     // the server sends no cube light: the client works it out (see CubicClientLight)
-                    CubicClientLight light = ((ClientCubeCache) level.getChunkSource()).cc_light();
+                    CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
                     if (light != null) {
                         light.onCubeLoaded(levelCube);
                     }

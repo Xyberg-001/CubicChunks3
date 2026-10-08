@@ -12,7 +12,6 @@ import io.github.notstirred.dasm.api.annotations.Dasm;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
 import io.github.opencubicchunks.cc_core.api.CubePos;
-import io.github.opencubicchunks.cubicchunks.client.lighting.CubicClientLight;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
@@ -52,9 +51,6 @@ public interface ClientCubeCache extends CubeSource {
     int cc_cubeViewCenterY();
 
     int cc_cubeViewRadius();
-
-    /** Light for the held cubes (null unless the level is cubic). */
-    @Nullable CubicClientLight cc_light();
 
     // Fields and methods on this are public so they can be accessed from MixinClientChunkCache and tests; they should not be used anywhere else
     // (This has to be here since we can't add inner classes with mixin)
