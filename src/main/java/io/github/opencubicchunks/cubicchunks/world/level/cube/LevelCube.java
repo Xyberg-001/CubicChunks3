@@ -210,7 +210,8 @@ public class LevelCube extends CubeAccess implements LevelClo {
                 }
 
                 if (LightEngine.hasDifferentLightProperties(previousState, state)) {
-                    // TODO (P2) lighting - see vanilla equivalent to this method
+                    // TODO (P2) lighting on the server - see vanilla equivalent to this method
+                    ((CubeSource) this.level.getChunkSource()).cc_onCubeLightPropertiesChanged(pos);
                 }
 
                 boolean flag4 = !previousState.is(block);

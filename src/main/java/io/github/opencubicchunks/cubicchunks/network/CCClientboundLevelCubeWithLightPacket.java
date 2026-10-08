@@ -10,6 +10,7 @@ import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CubicChunks;
+import io.github.opencubicchunks.cubicchunks.client.lighting.CubicClientLight;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
@@ -58,13 +59,15 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
             ((ClientCubeCache) (level.getChunkSource())).cc_replaceWithPacketData(x, y, z, payload.cubeData.getReadBuffer(), heightmaps,
                     entityTagConsumer);
 
-            // TODO P2 :: Vanilla does light updates at this point
-//            ClientboundLightUpdatePacketData clientboundlightupdatepacketdata = payload.getLightData();
+            // TODO P2 :: light on the server (vanilla sends it with the chunk); until then the client lights cubes itself
             ((ClientLevel) level).queueLightUpdate(() -> {
-//                this.applyLightData(i, j, clientboundlightupdatepacketdata, false);
                 LevelCube levelCube = ((CubeSource) level.getChunkSource()).cc_getCube(x, y, z, false);
                 if (levelCube != null) {
-//                    this.enableChunkLight(levelCube, i, j);
+                    // the server sends no cube light: the client works it out (see CubicClientLight)
+                    CubicClientLight light = ((ClientCubeCache) level.getChunkSource()).cc_light();
+                    if (light != null) {
+                        light.onCubeLoaded(levelCube);
+                    }
                     // as 26.3's enableChunkLight: the cube's sections and their neighbours are dirty now that it can render
                     int minSectionX = Coords.cubeToSection(x, 0);
                     int minSectionY = Coords.cubeToSection(y, 0);

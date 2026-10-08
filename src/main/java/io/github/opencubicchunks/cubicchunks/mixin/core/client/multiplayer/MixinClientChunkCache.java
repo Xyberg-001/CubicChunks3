@@ -15,6 +15,7 @@ import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
+import io.github.opencubicchunks.cubicchunks.client.lighting.CubicClientLight;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.CubicClientLevel;
 import io.github.opencubicchunks.cubicchunks.mixin.access.client.ClientChunkCache$StorageAccess;
@@ -24,12 +25,15 @@ import io.github.opencubicchunks.cubicchunks.world.level.cube.EmptyLevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
 import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.LightChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.spongepowered.asm.mixin.Final;
@@ -52,6 +56,8 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
 
     private LevelCube cc_emptyCube;
 
+    private @Nullable CubicClientLight cc_light;
+
     @Shadow @Final ClientLevel level;
 
     /**
@@ -63,6 +69,7 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
             cc_emptyCube = new EmptyLevelCube(level, CubePos.of(0, 0, 0),
                     level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.PLAINS));
             cc_cubeStorage = new ClientCubeCache.Storage(calculateStorageRange(viewDistance), level);
+            cc_light = new CubicClientLight(level, this);
             // TODO we could redirect the initial construction instead of immediately resizing. doesn't really matter
             updateViewRadius(cc_calculateChunkViewDistance(viewDistance));
         }
@@ -203,6 +210,34 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
         return this.cc_cubeStorage != null;
     }
 
+    @Override public int cc_cubeViewCenterY() {
+        return this.cc_cubeStorage.viewCenterY;
+    }
+
+    @Override public int cc_cubeViewRadius() {
+        return this.cc_cubeStorage.cubeRadius;
+    }
+
+    @Override public @Nullable CubicClientLight cc_light() {
+        return this.cc_light;
+    }
+
+    @Shadow public abstract @Nullable LevelChunk getChunk(int x, int z, ChunkStatus status, boolean load);
+
+    /** In a cubic level the light engine reads columns made of the held cubes (see CubicClientLight). */
+    public @Nullable LightChunk getChunkForLighting(int x, int z) {
+        if (this.cc_light != null) {
+            return this.cc_light.column(x, z);
+        }
+        return this.getChunk(x, z, ChunkStatus.EMPTY, false);
+    }
+
+    @Override public void cc_onCubeLightPropertiesChanged(BlockPos pos) {
+        if (this.cc_light != null) {
+            this.cc_light.onBlockChanged(pos);
+        }
+    }
+
     @Override public void cc_trackCube(LevelCube cube, boolean loaded) {
         ClientChunkCache$StorageAccess tracking = (ClientChunkCache$StorageAccess) (Object) this.storage;
         int buffer = tracking.cc_updatingSetsIndex();
@@ -213,6 +248,10 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
         } else {
             tracking.cc_addedLoadedChunks()[buffer].remove(cubeNode);
             tracking.cc_removedLoadedChunks()[buffer].add(cubeNode);
+        }
+        if (!loaded && this.cc_light != null) {
+            CubicClientLight light = this.cc_light;
+            this.level.queueLightUpdate(() -> light.onCubeUnloaded(cube));
         }
         CubePos cubePos = cube.cc_getCubePos();
         LevelChunkSection[] sections = cube.getSections();

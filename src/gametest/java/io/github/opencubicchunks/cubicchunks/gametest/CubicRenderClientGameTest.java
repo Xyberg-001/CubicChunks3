@@ -9,6 +9,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.chunk.CompiledSectionMesh;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
+import net.minecraft.world.level.LightLayer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,7 +33,8 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             visit(context, world, "y1000", 0, 1010, 0,
                     new String[] { "fill -10 1000 -10 10 1000 10 minecraft:diamond_block" });
             visit(context, world, "y-300", 0, -290, 0,
-                    new String[] { "fill -10 -299 -10 10 -280 10 minecraft:air", "fill -10 -300 -10 10 -300 10 minecraft:emerald_block" });
+                    new String[] { "fill -10 -299 -10 10 -280 10 minecraft:air", "fill -10 -300 -10 10 -300 10 minecraft:emerald_block",
+                            "setblock 0 -295 3 minecraft:glowstone" });
         }
     }
 
@@ -50,6 +53,14 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         context.takeScreenshot("cc-" + name);
     }
 
+    private static String light(Minecraft mc, BlockPos pos) {
+        var engine = mc.level.getLightEngine();
+        SectionPos section = SectionPos.of(pos);
+        return "light at " + pos.toShortString() + ": sky " + mc.level.getBrightness(LightLayer.SKY, pos) + " (data " + (engine.getLayerListener(LightLayer.SKY)
+                .getDataLayerData(section) != null) + "), block " + mc.level.getBrightness(LightLayer.BLOCK, pos) + " (data "
+                + (engine.getLayerListener(LightLayer.BLOCK).getDataLayerData(section) != null) + "), raw " + mc.level.getMaxLocalRawBrightness(pos);
+    }
+
     private static String stats(Minecraft mc, BlockPos below) {
         int cubes = ((CubeSource) mc.level.getChunkSource()).cc_getLoadedCubeCount();
         int visible = 0;
@@ -62,6 +73,6 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         }
         return "player at " + mc.player.blockPosition() + ", " + cubes + " cubes loaded, " + visible + " visible sections (" + compiled
                 + " compiled), section 10 below the player compiled and visible: " + mc.levelRenderer.isSectionCompiledAndVisible(below, 0)
-                + ", block 10 below: " + mc.level.getBlockState(below);
+                + ", block 10 below: " + mc.level.getBlockState(below) + ", " + light(mc, below.above()) + "; at the player: " + light(mc, mc.player.blockPosition());
     }
 }
