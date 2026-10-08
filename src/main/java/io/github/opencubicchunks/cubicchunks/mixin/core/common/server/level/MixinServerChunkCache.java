@@ -43,6 +43,7 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ChunkResult;
 import net.minecraft.server.level.DistanceManager;
@@ -297,6 +298,11 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
         if (!spawnCategories.isEmpty() && this.level.getWorldBorder().isWithinBounds(center)) {
             CubicNaturalSpawner.spawnForCube(this.level, cube, spawnState, spawnCategories);
         }
+    }
+
+    @Override public boolean cc_isCubeBlockTicking(CubePos pos) {
+        ChunkHolder holder = this.getVisibleChunkIfPresent(CloPos.cubeAsLong(pos.getX(), pos.getY(), pos.getZ()));
+        return holder != null && holder.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING);
     }
 
     @Inject(method = "blockChanged", at = @At("HEAD"), cancellable = true)

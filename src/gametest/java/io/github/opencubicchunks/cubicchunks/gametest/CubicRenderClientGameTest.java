@@ -46,6 +46,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("ticks")) randomTicks(context, world, "ticks-y1000", 1000, true);
             if (stage("ticks")) randomTicks(context, world, "ticks-y-300", -300, false);
             if (stage("thunder")) thunder(context, world);
+            if (stage("scheduled")) scheduledTicks(context, world);
         }
     }
 
@@ -227,6 +228,55 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         context.takeScreenshot("cc-thunder");
         world.getServer().runCommand("weather clear");
         world.getServer().runCommand("gamemode spectator @a");
+    }
+
+    /**
+     * Scheduled ticks in cubes at Y 1000: water spreading (fluid ticks), sand falling (block ticks), and a tick that waits while its cube is
+     * unloaded and saved: a lit redstone lamp with nothing powering it, given a tick 200 ticks off that switches it off.
+     */
+    private static void scheduledTicks(ClientGameTestContext context, TestSingleplayerContext world) {
+        int x = -60;
+        int y = 1000;
+        int z = -60;
+        BlockPos lamp = new BlockPos(x - 3, y, z - 3);
+        world.getServer().runCommand("tp @a " + x + " " + (y + 10) + " " + z + " 0 90");
+        context.waitTicks(LOAD_TICKS);
+        world.getServer().runCommand(fill(x - 6, y - 1, z - 6, x + 6, y - 1, z + 6, "stone"));
+        // lit, so the source can't freeze this high up before it spreads (water freezes under block light 10)
+        world.getServer().runCommand("setblock " + x + " " + (y + 3) + " " + z + " minecraft:glowstone");
+        world.getServer().runCommand("setblock " + x + " " + y + " " + z + " minecraft:water");
+        world.getServer().runCommand("setblock " + (x + 3) + " " + (y + 4) + " " + (z + 3) + " minecraft:sand");
+        world.getServer().runCommand("setblock " + lamp.getX() + " " + lamp.getY() + " " + lamp.getZ() + " minecraft:redstone_lamp[lit=true]");
+        world.getServer().runOnServer(server -> server.overworld().scheduleTick(lamp, net.minecraft.world.level.block.Blocks.REDSTONE_LAMP, 200));
+        context.waitTicks(60);
+        String first = world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            int water = 0;
+            for (int dx = -6; dx <= 6; dx++) {
+                for (int dz = -6; dz <= 6; dz++) {
+                    if (level.getFluidState(new BlockPos(x + dx, y, z + dz)).is(net.minecraft.tags.FluidTags.WATER)) water++;
+                }
+            }
+            return "water on " + water + " blocks (source now " + level.getBlockState(new BlockPos(x, y, z)).getBlock().getName().getString() + "), sand at the floor " + level.getBlockState(new BlockPos(x + 3, y, z + 3)).is(net.minecraft.world.level.block.Blocks.SAND)
+                    + ", lamp lit " + level.getBlockState(lamp).getValue(net.minecraft.world.level.block.RedstoneLampBlock.LIT)
+                    + ", ticks pending " + level.getBlockTicks().count() + " block / " + level.getFluidTicks().count() + " fluid";
+        });
+        LOGGER.info("[cc-gametest] scheduled: {}", first);
+
+        world.getServer().runCommand("tp @a 0 -290 0");
+        context.waitTicks(300);
+        String away = world.getServer().computeOnServer(server -> {
+            var cube = ((io.github.opencubicchunks.cubicchunks.world.level.CubicLevelReader) server.overworld()).cc_getCube(
+                    io.github.opencubicchunks.cc_core.utils.Coords.blockToCube(lamp.getX()), io.github.opencubicchunks.cc_core.utils.Coords.blockToCube(lamp.getY()),
+                    io.github.opencubicchunks.cc_core.utils.Coords.blockToCube(lamp.getZ()), net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false);
+            return "lamp's cube loaded while away: " + (cube != null);
+        });
+        LOGGER.info("[cc-gametest] scheduled: {}", away);
+        world.getServer().runCommand("tp @a " + x + " " + (y + 10) + " " + z + " 0 90");
+        context.waitTicks(LOAD_TICKS + 100);
+        String back = world.getServer().computeOnServer(server -> "back: lamp lit " + server.overworld().getBlockState(lamp).getValue(net.minecraft.world.level.block.RedstoneLampBlock.LIT));
+        LOGGER.info("[cc-gametest] scheduled: {}", back);
+        context.takeScreenshot("cc-scheduled");
     }
 
     /** The air block above the highest block of x, z below Y 200. */

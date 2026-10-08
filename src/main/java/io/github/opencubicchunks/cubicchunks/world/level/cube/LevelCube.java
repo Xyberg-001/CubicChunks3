@@ -55,6 +55,7 @@ import net.minecraft.world.level.lighting.LightEngine;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.storage.TagValueInput;
+import io.github.opencubicchunks.cubicchunks.world.ticks.CubicLevelTicks;
 import net.minecraft.world.ticks.LevelChunkTicks;
 import net.minecraft.world.ticks.TickContainerAccess;
 import org.jetbrains.annotations.NotNull;
@@ -374,16 +375,16 @@ public class LevelCube extends CubeAccess implements LevelClo {
     @TransformFromMethod(value = "unpackTicks(J)V", owner = @Ref(LevelChunk.class))
     public native void unpackTicks(long pos);
 
-    // TODO (P2 or P3) ticks are disabled for now; stub methods as placeholders
-//    @TransformFromMethod(value = @MethodSig("registerTickContainerInLevel(Lnet/minecraft/server/level/ServerLevel;)V"), owner = @Ref(LevelChunk
-//    .class))
-//    public native void registerTickContainerInLevel(ServerLevel level);
-    public void registerTickContainerInLevel(ServerLevel level) {}
+    /** As LevelChunk's: the level's scheduled ticks keep this cube's containers while it is loaded (see CubicLevelTicks). */
+    public void registerTickContainerInLevel(ServerLevel level) {
+        ((CubicLevelTicks<Block>) level.getBlockTicks()).cc_addContainer(this.cc_getCubePos(), this.blockTicks);
+        ((CubicLevelTicks<Fluid>) level.getFluidTicks()).cc_addContainer(this.cc_getCubePos(), this.fluidTicks);
+    }
 
-    // @TransformFromMethod(value = @MethodSig("unregisterTickContainerFromLevel(Lnet/minecraft/server/level/ServerLevel;)V"), owner = @Ref
-    // (LevelChunk.class))
-//    public native void unregisterTickContainerFromLevel(ServerLevel level);
-    public void unregisterTickContainerFromLevel(ServerLevel level) {}
+    public void unregisterTickContainerFromLevel(ServerLevel level) {
+        ((CubicLevelTicks<Block>) level.getBlockTicks()).cc_removeContainer(this.cc_getCubePos());
+        ((CubicLevelTicks<Fluid>) level.getFluidTicks()).cc_removeContainer(this.cc_getCubePos());
+    }
 
     @TransformFromMethod(value = "getPersistedStatus()Lnet/minecraft/world/level/chunk/status/ChunkStatus;", owner = @Ref(LevelChunk.class))
     @Override public native ChunkStatus getPersistedStatus();

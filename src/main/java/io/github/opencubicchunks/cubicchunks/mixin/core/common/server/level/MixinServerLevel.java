@@ -1,6 +1,13 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
 import io.github.opencubicchunks.cc_core.api.CubePos;
+import io.github.opencubicchunks.cc_core.api.CubicConstants;
+import io.github.opencubicchunks.cc_core.utils.Coords;
+import io.github.opencubicchunks.cubicchunks.world.ticks.CubicLevelTicks;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.ticks.LevelTicks;
 import io.github.opencubicchunks.cubicchunks.world.level.entity.CubicEntitySections;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -59,6 +66,8 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
     }
 
     @Shadow @Final private PersistentEntitySectionManager<Entity> entityManager;
+    @Shadow @Final private LevelTicks<Block> blockTicks;
+    @Shadow @Final private LevelTicks<Fluid> fluidTicks;
 
     /** A cubic level's entities are tracked and ticked cube by cube (see CubicEntitySections). */
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -69,7 +78,26 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
     ) {
         if (cc_isCubic) {
             ((CubicEntitySections.Manager) this.entityManager).cc_makeCubic();
+            ((CubicLevelTicks<?>) this.blockTicks).cc_makeCubic(this::cc_isCubeTickingWithEntitiesLoaded);
+            ((CubicLevelTicks<?>) this.fluidTicks).cc_makeCubic(this::cc_isCubeTickingWithEntitiesLoaded);
         }
+    }
+
+
+    /** As vanilla's isPositionTickingWithEntitiesLoaded, for a cube: in block-ticking range, and its columns' entities loaded. */
+    private boolean cc_isCubeTickingWithEntitiesLoaded(long cubeKey) {
+        CubePos cubePos = CubePos.from(cubeKey);
+        if (!((ServerCubeCache) this.chunkSource).cc_isCubeBlockTicking(cubePos)) {
+            return false;
+        }
+        for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
+            for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
+                if (!this.entityManager.areEntitiesLoaded(ChunkPos.pack(Coords.cubeToSection(cubePos.getX(), dx), Coords.cubeToSection(cubePos.getZ(), dz)))) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     @Override public void cc_onCubeFullStatusChange(CubePos cubePos, FullChunkStatus status) {
