@@ -53,6 +53,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("tint")) tintCaches(context);
             if (stage("lightsync")) lightSync(context, world);
             if (stage("scans")) blockScans(context, world);
+            if (stage("viewdistance")) viewDistance(context, world);
         }
     }
 
@@ -578,6 +579,30 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
                     cows.get(0).getFluidHeight(net.minecraft.tags.FluidTags.WATER)) + ")");
         });
         LOGGER.info("[cc-gametest] scans: {}", report);
+    }
+
+    /**
+     * The players' ticket tracker reaches only as far as the view distance in cubes; changing the render distance (which a singleplayer
+     * server follows) drops the cubes past the new edge or spreads out to it: what the server keeps loaded and what the client holds follow.
+     */
+    private static void viewDistance(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("tp @a 0 60 0");
+        context.waitTicks(LOAD_TICKS);
+        int start = context.computeOnClient(mc -> mc.options.renderDistance().get());
+        LOGGER.info("[cc-gametest] view distance: render distance {}: {}", start, loadedCounts(context, world));
+        for (int distance : new int[] { 4, 12, start }) {
+            context.runOnClient(mc -> mc.options.renderDistance().set(distance));
+            context.waitTicks(LOAD_TICKS);
+            LOGGER.info("[cc-gametest] view distance: render distance {}: {}", distance, loadedCounts(context, world));
+        }
+    }
+
+    private static String loadedCounts(ClientGameTestContext context, TestSingleplayerContext world) {
+        int server = world.getServer().computeOnServer(s -> s.overworld().getChunkSource().getLoadedChunksCount());
+        int client = context.computeOnClient(mc -> ((io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource) mc.level.getChunkSource())
+                .cc_getLoadedCubeCount());
+        int serverView = world.getServer().computeOnServer(s -> s.getPlayerList().getViewDistance());
+        return "server view distance " + serverView + ", server cube and column holders " + server + ", client cubes held " + client;
     }
 
     /** The air block above the highest block of x, z below Y 200. */

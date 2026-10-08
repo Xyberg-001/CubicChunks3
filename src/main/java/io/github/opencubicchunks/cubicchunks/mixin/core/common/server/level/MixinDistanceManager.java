@@ -58,25 +58,22 @@ public abstract class MixinDistanceManager implements MarkableAsCubic {
 
     /**
      * Mob caps scale with the number of chunks near players (vanilla: within 8 chunks, 289 for one player). In a cubic level the counter holds
-     * cubes, which would multiply the caps by the cubes loaded up and down; only columns count instead, as vanilla's chunks, so the caps keep
-     * vanilla's mobs per area (a player's 8 cubes reach 34 by 34 chunks, a global monster cap of 280; each player's own cap stays 70). Without
-     * columns in the counter, each cube column counts as the chunks it covers.
+     * cubes, which would multiply the caps by the cubes up and down; each cube column counts once instead, as the chunks it covers, so the
+     * caps keep vanilla's mobs per area (a player's 4 cubes, 128 blocks, cover 18 by 18 chunks: 324, a global monster cap of 78). The
+     * columns the counter also holds spread on past the cubes, so they are not counted.
      */
     @WrapOperation(method = "getNaturalSpawnChunkCount", at = @At(value = "INVOKE", target = "Lit/unimi/dsi/fastutil/longs/Long2ByteMap;size()I"))
     private int cc_columnsNearPlayers(Long2ByteMap tracked, Operation<Integer> original) {
         if (!cc_isCubic) {
             return original.call(tracked);
         }
-        int columns = 0;
         LongSet cubeColumns = new LongOpenHashSet();
         for (long clo : tracked.keySet()) {
-            if (CloPos.isChunk(clo)) {
-                columns++;
-            } else {
+            if (CloPos.isCube(clo)) {
                 cubeColumns.add(ChunkPos.pack(CloPos.extractX(clo), CloPos.extractZ(clo)));
             }
         }
-        return columns > 0 ? columns : cubeColumns.size() * CubicConstants.DIAMETER_IN_SECTIONS * CubicConstants.DIAMETER_IN_SECTIONS;
+        return cubeColumns.size() * CubicConstants.DIAMETER_IN_SECTIONS * CubicConstants.DIAMETER_IN_SECTIONS;
     }
 
     /**
