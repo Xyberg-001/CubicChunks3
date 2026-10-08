@@ -35,6 +35,7 @@ import io.github.notstirred.dasm.mod.DasmExtension;
 import io.github.notstirred.dasm.util.CachingClassProvider;
 import io.github.notstirred.dasm.util.ClassNodeProvider;
 import io.github.notstirred.dasm.util.TypeUtil;
+import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.CustomValue;
@@ -101,6 +102,14 @@ public class FabricDasmConfigPlugin implements IMixinConfigPlugin {
         return configs;
     }
 
+    /**
+     * A dedicated server has no client classes, so a dasm class in a client package (transforming client code) is left out there, as the
+     * mixin config's "client" list is; scanning it would look up its missing target and stop the server from starting.
+     */
+    private static boolean appliesHere(String dasmClass) {
+        return FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT || !dasmClass.contains(".client.");
+    }
+
     @Override public String getRefMapperConfig() {
         return null;
     }
@@ -114,6 +123,9 @@ public class FabricDasmConfigPlugin implements IMixinConfigPlugin {
             Set<String> dasmTypes = new HashSet<>();
             for (DasmConfig dasmConfig : dasmConfigs()) {
                 for (String dasmClass : dasmConfig.dasmClasses) {
+                    if (!appliesHere(dasmClass)) {
+                        continue;
+                    }
                     this.extension.shouldApplyMixin(dasmClass);
                     dasmTypes.add(dasmClass);
                 }

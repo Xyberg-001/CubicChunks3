@@ -159,6 +159,19 @@ processResources {
     }
 }
 
+// The mod jar carries CubicChunksCore's classes as the javaHeaders transform leaves them on the runtime classpath (its MC* stand-ins
+// rewritten to the game's own classes); dev runs read the same files from the classpath, a real install only has the jar.
+jar {
+    // the transformed core is an input (else the jar can keep an older one after the core changes)
+    dependsOn("CubicChunksCore:assemble")
+    inputs.files(configurations.runtimeClasspath.filter { it.name.contains("CubicChunksCore") })
+    from({
+        configurations.runtimeClasspath.filter { it.name.contains("CubicChunksCore") }.collect { zipTree(it) }
+    }) {
+        exclude("META-INF/MANIFEST.MF")
+    }
+}
+
 // The tests in src/test ran on NeoForge's test framework; ported ones go in src/test-fabric
 sourceSets.test.java.srcDirs = ['src/test-fabric/java']
 sourceSets.test.resources.srcDirs = ['src/test-fabric/resources']
