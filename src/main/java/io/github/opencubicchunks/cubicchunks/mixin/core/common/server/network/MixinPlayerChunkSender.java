@@ -1,5 +1,7 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.network;
 
+import io.github.opencubicchunks.cubicchunks.world.level.chunklike.CloAccess;
+import com.llamalad7.mixinextras.sugar.Local;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.ToIntFunction;
@@ -140,18 +142,20 @@ public class MixinPlayerChunkSender {
     @TransformFromMethod(value = "collectChunksToSend(Lnet/minecraft/server/level/ChunkMap;Lnet/minecraft/world/level/ChunkPos;)Ljava/util/List;")
     private native List<LevelClo> cc_collectChunksToSend(ChunkMap chunkMap, CloPos cloPos);
 
-    // FIXME these should probably have some kind of reasonable sort order - at the very least, chunks before cubes
-    // Untyped on purpose: a lambda typed Comparator<Long> casts its arguments to Long, and the two comparators' order in the method body is
-    // not something to rely on (26.3 sorts clos with the one that used to compare packed positions).
-    @Unique private static final Comparator<Object> CC_NO_ORDER = (a, b) -> 0;
-
+    // Vanilla sends the nearest chunks first: the nearest clos go first here (CloPos.distanceSquared). Its two comparators are lambdas typed
+    // for vanilla's values (packed positions, then chunks), which would cast a clo wrongly, and their order in the method body is not
+    // something to rely on (26.3 sorts clos with the one that used to compare packed positions): both take either kind.
     @Dynamic @Redirect(method = "cc_collectChunksToSend", at = @At(ordinal = 0, value = "INVOKE", target = "Ljava/util/Comparator;comparingInt(Ljava/util/function/ToIntFunction;)Ljava/util/Comparator;"))
-    private Comparator<Object> cc_onCollectChunksToSend_comparator1(ToIntFunction<Object> keyExtractor) {
-        return CC_NO_ORDER;
+    private Comparator<Object> cc_onCollectChunksToSend_comparator1(ToIntFunction<Object> keyExtractor, @Local(argsOnly = true) CloPos playerPos) {
+        return cc_nearestFirst(playerPos);
     }
 
     @Dynamic @Redirect(method = "cc_collectChunksToSend", at = @At(ordinal = 1, value = "INVOKE", target = "Ljava/util/Comparator;comparingInt(Ljava/util/function/ToIntFunction;)Ljava/util/Comparator;"))
-    private Comparator<Object> cc_onCollectChunksToSend_comparator2(ToIntFunction<Object> keyExtractor) {
-        return CC_NO_ORDER;
+    private Comparator<Object> cc_onCollectChunksToSend_comparator2(ToIntFunction<Object> keyExtractor, @Local(argsOnly = true) CloPos playerPos) {
+        return cc_nearestFirst(playerPos);
+    }
+
+    @Unique private static Comparator<Object> cc_nearestFirst(CloPos playerPos) {
+        return Comparator.comparingInt(clo -> clo instanceof Long key ? playerPos.distanceSquared(key) : playerPos.distanceSquared(((CloAccess) clo).cc_getCloPos()));
     }
 }
