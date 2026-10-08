@@ -13,19 +13,23 @@ import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddFieldToSe
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
+import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.CubicClientLevel;
+import io.github.opencubicchunks.cubicchunks.mixin.access.client.ClientChunkCache$StorageAccess;
 import io.github.opencubicchunks.cubicchunks.mixin.core.common.world.level.chunk.MixinChunkSource;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.EmptyLevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
 import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.spongepowered.asm.mixin.Final;
@@ -191,5 +195,39 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
 
     @Override public int cc_getLoadedCubeCount() {
         return this.cc_cubeStorage.chunkCount;
+    }
+
+    @Shadow private volatile ClientChunkCache.Storage storage;
+
+    @Override public boolean cc_isCubic() {
+        return this.cc_cubeStorage != null;
+    }
+
+    @Override public void cc_trackCube(LevelCube cube, boolean loaded) {
+        ClientChunkCache$StorageAccess tracking = (ClientChunkCache$StorageAccess) (Object) this.storage;
+        int buffer = tracking.cc_updatingSetsIndex();
+        long cubeNode = cube.cc_getCubePos().asLong();
+        if (loaded) {
+            tracking.cc_removedLoadedChunks()[buffer].remove(cubeNode);
+            tracking.cc_addedLoadedChunks()[buffer].add(cubeNode);
+        } else {
+            tracking.cc_addedLoadedChunks()[buffer].remove(cubeNode);
+            tracking.cc_removedLoadedChunks()[buffer].add(cubeNode);
+        }
+        CubePos cubePos = cube.cc_getCubePos();
+        LevelChunkSection[] sections = cube.getSections();
+        for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
+            for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
+                for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
+                    long sectionNode = SectionPos.asLong(cubeToSection(cubePos.getX(), dx), cubeToSection(cubePos.getY(), dy),
+                            cubeToSection(cubePos.getZ(), dz));
+                    if (!loaded || sections[Coords.sectionToIndex(dx, dy, dz)].hasOnlyAir()) {
+                        tracking.cc_markSectionEmpty(sectionNode);
+                    } else {
+                        tracking.cc_markSectionNotEmpty(sectionNode);
+                    }
+                }
+            }
+        }
     }
 }

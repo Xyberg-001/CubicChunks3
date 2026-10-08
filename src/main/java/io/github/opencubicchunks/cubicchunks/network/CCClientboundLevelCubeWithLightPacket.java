@@ -7,12 +7,12 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import io.github.opencubicchunks.cc_core.api.CubePos;
+import io.github.opencubicchunks.cc_core.api.CubicConstants;
+import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache;
-import io.github.opencubicchunks.cubicchunks.client.renderer.CubicLevelRenderer;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -65,7 +65,13 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
                 LevelCube levelCube = ((CubeSource) level.getChunkSource()).cc_getCube(x, y, z, false);
                 if (levelCube != null) {
 //                    this.enableChunkLight(levelCube, i, j);
-                    ((CubicLevelRenderer) Minecraft.getInstance().levelRenderer).cc_onCubeReadyToRender(payload.pos);
+                    // as 26.3's enableChunkLight: the cube's sections and their neighbours are dirty now that it can render
+                    int minSectionX = Coords.cubeToSection(x, 0);
+                    int minSectionY = Coords.cubeToSection(y, 0);
+                    int minSectionZ = Coords.cubeToSection(z, 0);
+                    int maxOffset = CubicConstants.DIAMETER_IN_SECTIONS;
+                    ((ClientLevel) level).setSectionRangeDirty(minSectionX - 1, minSectionY - 1, minSectionZ - 1,
+                            minSectionX + maxOffset, minSectionY + maxOffset, minSectionZ + maxOffset);
                 }
             });
         }

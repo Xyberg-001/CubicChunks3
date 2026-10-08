@@ -30,8 +30,6 @@ import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStatusT
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStatusTasks;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStep;
 import net.minecraft.client.multiplayer.ClientChunkCache;
-import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.SectionOcclusionGraph;
 import net.minecraft.client.renderer.chunk.SectionCopy;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ChunkGenerationTask;
@@ -222,17 +220,11 @@ public interface ChunkToCubeSet extends GlobalSet {
     @IntraOwnerContainer(@Ref(ClientChunkCache.class))
     class ClientChunkCache_redirects {}
 
-    @IntraOwnerContainer(@Ref(SectionOcclusionGraph.class))
-    class SectionOcclusionGraph_redirects {}
-
     @IntraOwnerContainer(@Ref(Level.class))
     class Level_redirects {}
 
     @IntraOwnerContainer(@Ref(ServerLevel.class))
     class ServerLevel_redirects extends Level_redirects {}
-
-    @IntraOwnerContainer(@Ref(LevelRenderer.class))
-    class LevelRenderer_redirects {}
 
     @IntraOwnerContainer(@Ref(SectionCopy.class))
     class SectionCopy_redirects {}

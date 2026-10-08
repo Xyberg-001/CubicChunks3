@@ -22,3 +22,4 @@ accessible	method	net/minecraft/util/StaticCache2D	<init>	(IIIILnet/minecraft/ut
 
 # gone in 26.3: public net.minecraft.client.renderer.SectionOcclusionGraph$GraphEvents
 # gone in 26.3: public net.minecraft.client.renderer.SectionOcclusionGraph$GraphEvents <init>(Lit/unimi/dsi/fastutil/longs/LongSet;Ljava/util/concurrent/BlockingQueue;)V
+accessible	class	net/minecraft/client/RotatingSectionStorage$Node

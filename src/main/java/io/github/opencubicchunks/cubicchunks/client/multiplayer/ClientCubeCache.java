@@ -12,18 +12,13 @@ import io.github.notstirred.dasm.api.annotations.Dasm;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
 import io.github.opencubicchunks.cc_core.api.CubePos;
-import io.github.opencubicchunks.cc_core.api.CubicConstants;
-import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.core.SectionPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 public interface ClientCubeCache extends CubeSource {
@@ -43,12 +38,20 @@ public interface ClientCubeCache extends CubeSource {
 
     void cc_updateViewRadius(int viewDistance);
 
+    /** Whether this cache serves a cubic level (it then holds cubes, and columns do not render). */
+    boolean cc_isCubic();
+
+    /**
+     * Reports a cube arriving or leaving to the renderer, through the sets 26.3's client chunk storage hands it each frame: the cube's packed
+     * position joins or leaves the loaded set, and each of its sections is marked empty or not.
+     */
+    void cc_trackCube(LevelCube cube, boolean loaded);
+
     // Fields and methods on this are public so they can be accessed from MixinClientChunkCache and tests; they should not be used anywhere else
     // (This has to be here since we can't add inner classes with mixin)
     @Dasm(ChunkToCubeSet.class)
     final class Storage {
         public final AtomicReferenceArray<LevelCube> chunks;
-        final LongOpenHashSet loadedEmptySections = new LongOpenHashSet();
         public final int cubeRadius;
         private final int viewRange;
         public volatile int viewCenterX;
@@ -74,85 +77,32 @@ public interface ClientCubeCache extends CubeSource {
             LevelCube levelchunk = this.chunks.getAndSet(chunkIndex, chunk);
             if (levelchunk != null) {
                 --this.chunkCount;
-                this.dropEmptySections(levelchunk);
+                this.tracking().cc_trackCube(levelchunk, false);
 //                this.level.unload(levelchunk); // TODO P2
             }
 
             if (chunk != null) {
                 ++this.chunkCount;
+                this.tracking().cc_trackCube(chunk, true);
             }
         }
 
         public void drop(int chunkIndex, LevelCube chunk) {
             if (this.chunks.compareAndSet(chunkIndex, chunk, null)) {
                 this.chunkCount--;
-                this.dropEmptySections(chunk);
+                this.tracking().cc_trackCube(chunk, false);
             }
 
 //            this.level.unload(chunk); // TODO P2
         }
 
-        public void onSectionEmptinessChanged(int x, int y, int z, boolean isEmpty) {
-            if (this.inRange(x, y, z)) {
-                long i = SectionPos.asLong(x, y, z);
-                if (isEmpty) {
-                    this.loadedEmptySections.add(i);
-                } else if (this.loadedEmptySections.remove(i)) {
-//                    ClientChunkCache.this.level.onSectionBecomingNonEmpty(i); // TODO P2
-                }
-            }
-        }
-
-        public void dropEmptySections(LevelCube chunk) {
-            var cubePos = chunk.cc_getCubePos();
-
-            for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
-                for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
-                    for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
-                        long sectionPosLong = SectionPos.asLong(Coords.cubeToSection(cubePos.getX(), dx), Coords.cubeToSection(cubePos.getY(), dy),
-                                Coords.cubeToSection(cubePos.getZ(), dz));
-                        this.loadedEmptySections.remove(sectionPosLong);
-                    }
-                }
-            }
-        }
-
-        public void addEmptySections(LevelCube chunk) {
-            var cubePos = chunk.cc_getCubePos();
-            LevelChunkSection[] chunkSections = chunk.getSections();
-
-            for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
-                for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
-                    for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
-                        var chunkSection = chunkSections[Coords.sectionToIndex(dx, dy, dz)];
-                        long sectionPosLong = SectionPos.asLong(Coords.cubeToSection(cubePos.getX(), dx), Coords.cubeToSection(cubePos.getY(), dy),
-                                Coords.cubeToSection(cubePos.getZ(), dz));
-                        if (chunkSection.hasOnlyAir()) {
-                            this.loadedEmptySections.add(sectionPosLong);
-                        }
-                    }
-                }
-            }
-        }
-
+        /** New packet data for a cube already held: its sections may have filled or emptied. */
         public void refreshEmptySections(LevelCube chunk) {
-            var cubePos = chunk.cc_getCubePos();
-            LevelChunkSection[] chunkSections = chunk.getSections();
+            this.tracking().cc_trackCube(chunk, true);
+        }
 
-            for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
-                for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
-                    for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
-                        var chunkSection = chunkSections[Coords.sectionToIndex(dx, dy, dz)];
-                        long sectionPosLong = SectionPos.asLong(Coords.cubeToSection(cubePos.getX(), dx), Coords.cubeToSection(cubePos.getY(), dy),
-                                Coords.cubeToSection(cubePos.getZ(), dz));
-                        if (chunkSection.hasOnlyAir()) {
-                            this.loadedEmptySections.add(sectionPosLong);
-                        } else if (this.loadedEmptySections.remove(sectionPosLong)) {
-//                            ClientChunkCache.this.level.onSectionBecomingNonEmpty(sectionPosLong); // TODO P2
-                        }
-                    }
-                }
-            }
+        private ClientCubeCache tracking() {
+            return (ClientCubeCache) this.level.getChunkSource();
         }
 
         public boolean inRange(int x, int y, int z) {
