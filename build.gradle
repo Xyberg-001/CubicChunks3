@@ -49,6 +49,19 @@ dasmGen {
     }
 }
 
+// Scripted client runs (src/gametest, Fabric's client game test API): ./gradlew runClientGameTest opens a game window, plays the tests
+// in a fresh run directory and quits
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "cubicchunks_gametest"
+        enableGameTests = false
+        enableClientGameTests = true
+        eula = true
+        clearRunDirectory = true
+    }
+}
+
 mixinGen {
     filePattern = "cubicchunks.mixins.%s.json"
     defaultRefmap = "CubicChunks-refmap.json"
@@ -67,6 +80,11 @@ mixinGen {
         it.injectorsDefaultRequire = 1
     }
     config(sourceSets.test, "test") {
+        it.required = true
+        it.conformVisibility = true
+        it.injectorsDefaultRequire = 1
+    }
+    config(sourceSets.gametest, "gametest") {
         it.required = true
         it.conformVisibility = true
         it.injectorsDefaultRequire = 1

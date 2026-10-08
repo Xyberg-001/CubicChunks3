@@ -142,6 +142,17 @@ public abstract class MixinGenerationChunkHolder implements GenerationCloHolder 
     @TransformFromMethod(owner = @Ref(GenerationChunkHolder.class), value = "getPos()Lnet/minecraft/world/level/ChunkPos;")
     public native CubePos cc_getCubePos();
 
+    /**
+     * A cube holder has no chunk: vanilla's chunk lookups would cast the cube to ChunkAccess. Other mods ask anyway (Fabric API's lifecycle
+     * events look up every holder's chunk when its level changes), so they get none; CC's own code uses the cube copies above.
+     */
+    @Inject(method = { "getChunkIfPresentUnchecked", "getChunkIfPresent" }, at = @At("HEAD"), cancellable = true)
+    private void cc_noChunkInCubeHolder(ChunkStatus status, CallbackInfoReturnable<ChunkAccess> cir) {
+        if (cc_cubePos != null) {
+            cir.setReturnValue(null);
+        }
+    }
+
     // 26.3's level-load counter (ChunkLoadCounter) asks every holder for its latest status, cube holders included
     @AddTransformToSets(ChunkToCubeSet.GenerationChunkHolder_redirects.class)
     @TransformFromMethod(owner = @Ref(GenerationChunkHolder.class), value = "getLatestStatus()Lnet/minecraft/world/level/chunk/status/ChunkStatus;")

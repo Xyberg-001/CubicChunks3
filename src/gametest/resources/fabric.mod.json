@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "cubicchunks_gametest",
+  "version": "1.0.0",
+  "name": "Cubic Chunks client game tests",
+  "description": "Scripted client runs for checking cubic rendering; only loaded by runClientGameTest.",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "io.github.opencubicchunks.cubicchunks.gametest.CubicRenderClientGameTest"
+    ]
+  },
+  "depends": {
+    "cubicchunks": "*",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

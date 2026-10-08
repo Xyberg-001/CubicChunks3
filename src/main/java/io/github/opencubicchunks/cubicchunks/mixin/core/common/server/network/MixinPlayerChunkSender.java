@@ -141,13 +141,17 @@ public class MixinPlayerChunkSender {
     private native List<LevelClo> cc_collectChunksToSend(ChunkMap chunkMap, CloPos cloPos);
 
     // FIXME these should probably have some kind of reasonable sort order - at the very least, chunks before cubes
+    // Untyped on purpose: a lambda typed Comparator<Long> casts its arguments to Long, and the two comparators' order in the method body is
+    // not something to rely on (26.3 sorts clos with the one that used to compare packed positions).
+    @Unique private static final Comparator<Object> CC_NO_ORDER = (a, b) -> 0;
+
     @Dynamic @Redirect(method = "cc_collectChunksToSend", at = @At(ordinal = 0, value = "INVOKE", target = "Ljava/util/Comparator;comparingInt(Ljava/util/function/ToIntFunction;)Ljava/util/Comparator;"))
-    private Comparator<Long> cc_onCollectChunksToSend_comparator1(ToIntFunction<Long> keyExtractor) {
-        return (a, b) -> 0;
+    private Comparator<Object> cc_onCollectChunksToSend_comparator1(ToIntFunction<Object> keyExtractor) {
+        return CC_NO_ORDER;
     }
 
     @Dynamic @Redirect(method = "cc_collectChunksToSend", at = @At(ordinal = 1, value = "INVOKE", target = "Ljava/util/Comparator;comparingInt(Ljava/util/function/ToIntFunction;)Ljava/util/Comparator;"))
-    private Comparator<LevelClo> cc_onCollectChunksToSend_comparator2(ToIntFunction<LevelClo> keyExtractor) {
-        return (a, b) -> 0;
+    private Comparator<Object> cc_onCollectChunksToSend_comparator2(ToIntFunction<Object> keyExtractor) {
+        return CC_NO_ORDER;
     }
 }
