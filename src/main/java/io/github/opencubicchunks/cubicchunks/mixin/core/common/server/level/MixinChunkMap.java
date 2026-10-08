@@ -1,5 +1,6 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
+import io.github.opencubicchunks.cubicchunks.server.level.CubicServerLevel;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -150,9 +151,14 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
             boolean sync, CallbackInfo ci
     ) {
         if (((CanBeCubic) level).cc_isCubic()) {
-            // TODO P2 (entities): actually pass in a cloStatusListener - since ChunkStatusUpdateListener is passed as a parameter, not sure what the
-            // best approach is without making our own constructor
-            cc_cloStatusListener = (cloPos, fullChunkStatus) -> {};
+            // vanilla's listener is the level's entity manager (updateChunkStatus); cubes report to it cube by cube (see CubicEntitySections)
+            cc_cloStatusListener = (cloPos, fullChunkStatus) -> {
+                if (cloPos.isCube()) {
+                    ((CubicServerLevel) level).cc_onCubeFullStatusChange(cloPos.cubePos(), fullChunkStatus);
+                } else {
+                    chunkStatusListener.onChunkStatusChange(cloPos.chunkPos(), fullChunkStatus);
+                }
+            };
             ((MarkableAsCubic) distanceManager).cc_setCubic();
             cc_cubeStorage = new CubeStorage(levelStorageAccess.getDimensionPath(level.dimension()), level.dimension().identifier().toString());
         }

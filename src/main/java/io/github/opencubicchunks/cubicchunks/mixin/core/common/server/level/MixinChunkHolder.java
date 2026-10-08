@@ -1,5 +1,7 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 
@@ -7,6 +9,7 @@ import javax.annotation.Nullable;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import io.github.notstirred.dasm.api.annotations.Dasm;
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddFieldToSets;
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddMethodToSets;
@@ -28,6 +31,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.ChunkResult;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.world.level.ChunkPos;
@@ -151,6 +155,18 @@ public abstract class MixinChunkHolder extends MixinGenerationChunkHolder implem
         } else {
             broadcastChanges(((LevelChunk) clo));
         }
+    }
+
+    /**
+     * 26.3 promotes a holder's full status once its chunk future succeeds, through a consumer typed for LevelChunk: for a cube holder the cube
+     * fails the cast inside the future, quietly, and the promotion (FULL, ticking: what entities and the level hear of) never comes. The
+     * consumer here only completes the confirmation, as vanilla's does, whatever the result holds.
+     */
+    @WrapOperation(method = "lambda$scheduleFullChunkPromotion$1", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ChunkResult;ifSuccess(Ljava/util/function/Consumer;)Lnet/minecraft/server/level/ChunkResult;"))
+    private static ChunkResult<?> cc_confirmPromotionForAnyResult(ChunkResult<Object> result, Consumer<?> vanillaConsumer,
+            Operation<ChunkResult<?>> original, @Local(argsOnly = true) CompletableFuture<Object> confirmation) {
+        return original.call(result, (Consumer<Object>) value -> confirmation.complete(null));
     }
 
     @WrapOperation(method = { "lambda$scheduleFullChunkPromotion$0",

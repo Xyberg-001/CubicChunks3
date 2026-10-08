@@ -1,5 +1,7 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
+import io.github.opencubicchunks.cc_core.api.CubePos;
+import io.github.opencubicchunks.cubicchunks.world.level.entity.CubicEntitySections;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -16,6 +18,10 @@ import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache;
 import io.github.opencubicchunks.cubicchunks.world.level.chunklike.LevelClo;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.FullChunkStatus;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.entity.PersistentEntitySectionManager;
+import net.minecraft.world.level.entity.Visibility;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.resources.ResourceKey;
@@ -45,6 +51,24 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
             CallbackInfo ci
     ) {
         // TODO conditionally mark as cubic based on dimension, config, level data, etc
+    }
+
+    @Shadow @Final private PersistentEntitySectionManager<Entity> entityManager;
+
+    /** A cubic level's entities are tracked and ticked cube by cube (see CubicEntitySections). */
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void cc_cubicEntities(
+            MinecraftServer server, Executor dispatcher, LevelStorageSource.LevelStorageAccess levelStorageAccess, ServerLevelData serverLevelData,
+            ResourceKey dimension, LevelStem levelStem, boolean isDebug, long biomeZoomSeed, List customSpawners, boolean tickTime,
+            CallbackInfo ci
+    ) {
+        if (cc_isCubic) {
+            ((CubicEntitySections.Manager) this.entityManager).cc_makeCubic();
+        }
+    }
+
+    @Override public void cc_onCubeFullStatusChange(CubePos cubePos, FullChunkStatus status) {
+        ((CubicEntitySections.Manager) this.entityManager).cc_updateCubeStatus(cubePos, Visibility.fromFullChunkStatus(status));
     }
 
     @Override public ServerCubeCache cc_getCubeSource() {

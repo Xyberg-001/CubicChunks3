@@ -36,7 +36,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             loadingScreen(context);
             visit(context, world, "ground", 0, 40, 0, null);
             visit(context, world, "y1000", 0, 1010, 0,
-                    new String[] { "fill -10 1000 -10 10 1000 10 minecraft:diamond_block" });
+                    new String[] { "fill -10 1000 -10 10 1000 10 minecraft:diamond_block", "summon minecraft:pig 3 1001 3" });
             visit(context, world, "y-300", 0, -290, 0,
                     new String[] { "fill -10 -299 -10 10 -280 10 minecraft:air", "fill -10 -300 -10 10 -300 10 minecraft:emerald_block",
                             "setblock 0 -295 3 minecraft:glowstone" });
@@ -94,7 +94,13 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
                 compiled++;
             }
         }
-        return "player at " + mc.player.blockPosition() + ", " + cubes + " cubes loaded, " + visible + " visible sections (" + compiled
+        int pigs = 0;
+        for (var entity : mc.level.entitiesForRendering()) {
+            if (entity.getType() == net.minecraft.world.entity.EntityTypes.PIG) {
+                pigs++;
+            }
+        }
+        return "player at " + mc.player.blockPosition() + ", " + cubes + " cubes loaded, " + pigs + " pigs seen, " + visible + " visible sections (" + compiled
                 + " compiled), section 10 below the player compiled and visible: " + mc.levelRenderer.isSectionCompiledAndVisible(below, 0)
                 + ", block 10 below: " + mc.level.getBlockState(below) + ", " + light(mc, below.above()) + "; at the player: " + light(mc, mc.player.blockPosition());
     }
