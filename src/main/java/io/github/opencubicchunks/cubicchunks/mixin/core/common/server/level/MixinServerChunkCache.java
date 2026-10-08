@@ -2,6 +2,7 @@ package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicNaturalSpawner;
+import io.github.opencubicchunks.cubicchunks.world.level.CubicThunder;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -281,7 +282,7 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
     @AddMethodToSets(containers = ChunkToCloSet.ServerChunkCache_redirects.class, method = "tickSpawningChunk(Lnet/minecraft/world/level/chunk/LevelChunk;Ljava/util/List;"
             + "Lnet/minecraft/world/level/NaturalSpawner$SpawnState;)V")
     private void cc_tickSpawningClo(LevelClo levelClo, List<MobCategory> spawnCategories, NaturalSpawner.SpawnState spawnState) {
-        // as vanilla's tickSpawningChunk, for a cube (columns hold no blocks of their own in a cubic level); thunder waits for cube ticking
+        // as vanilla's tickSpawningChunk, for a cube (columns hold no blocks of their own in a cubic level)
         if (!(levelClo instanceof LevelCube cube)) {
             return;
         }
@@ -289,7 +290,11 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
         CubePos cubePos = cube.cc_getCubePos();
         BlockPos center = new BlockPos(cubePos.minCubeX() + CubicConstants.DIAMETER_IN_BLOCKS / 2, cubePos.minCubeY() + CubicConstants.DIAMETER_IN_BLOCKS / 2,
                 cubePos.minCubeZ() + CubicConstants.DIAMETER_IN_BLOCKS / 2);
-        if (!spawnCategories.isEmpty() && this.level.isPositionEntityTicking(center) && this.level.getWorldBorder().isWithinBounds(center)) {
+        if (!this.level.isPositionEntityTicking(center)) {
+            return;
+        }
+        CubicThunder.tickCube(this.level, cube);
+        if (!spawnCategories.isEmpty() && this.level.getWorldBorder().isWithinBounds(center)) {
             CubicNaturalSpawner.spawnForCube(this.level, cube, spawnState, spawnCategories);
         }
     }

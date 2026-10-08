@@ -27,7 +27,7 @@ public final class CubicRandomTicks {
     private CubicRandomTicks() {}
 
     /** How many of vanilla's 16 by 16 columns a cube's top covers: each gets vanilla's tries at ice and snow. */
-    private static final int COLUMNS_PER_CUBE = CubicConstants.DIAMETER_IN_SECTIONS * CubicConstants.DIAMETER_IN_SECTIONS;
+    static final int COLUMNS_PER_CUBE = CubicConstants.DIAMETER_IN_SECTIONS * CubicConstants.DIAMETER_IN_SECTIONS;
 
     public static void tickCube(ServerLevel level, LevelCube cube, int tickSpeed) {
         CubePos cubePos = cube.cc_getCubePos();
@@ -75,10 +75,10 @@ public final class CubicRandomTicks {
     }
 
     /**
-     * The spot above the cube's highest block at x, z that vanilla's MOTION_BLOCKING heightmap would count, if the sky reaches it; null when
-     * it doesn't, or the cube has no such block there (then a lower cube holds this column's surface).
+     * The spot above the cube's highest block at x, z that vanilla's MOTION_BLOCKING heightmap would count, if that spot is open and the sky
+     * reaches it; null when not, or the cube has no such block there (then a lower cube holds this column's surface).
      */
-    private static @Nullable BlockPos surfaceIn(ServerLevel level, LevelCube cube, int x, int z) {
+    static @Nullable BlockPos surfaceIn(ServerLevel level, LevelCube cube, int x, int z) {
         CubePos cubePos = cube.cc_getCubePos();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, cubePos.maxCubeY(), z);
         while (pos.getY() >= cubePos.minCubeY()) {
@@ -89,8 +89,10 @@ public final class CubicRandomTicks {
             if (!Heightmap.Types.MOTION_BLOCKING.isOpaque().test(cube.getBlockState(pos))) {
                 pos.move(0, -1, 0);
             } else {
+                // the spot above must be open too (it lies in the next cube up when this is the cube's top row), and see the sky
                 BlockPos top = pos.above();
-                return level.getBrightness(LightLayer.SKY, top) == 15 ? top : null;
+                boolean open = !Heightmap.Types.MOTION_BLOCKING.isOpaque().test(level.getBlockState(top));
+                return open && level.getBrightness(LightLayer.SKY, top) == 15 ? top : null;
             }
         }
         return null;

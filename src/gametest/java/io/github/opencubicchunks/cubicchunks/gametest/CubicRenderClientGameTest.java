@@ -26,6 +26,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
     private static final Logger LOGGER = LogManager.getLogger("cc-gametest");
     private static final int LOAD_TICKS = 200;
     private static final int SPAWN_TICKS = 600;
+    private static final int THUNDER_TICKS = 1200;
 
     @Override public void runTest(ClientGameTestContext context) {
         try (TestSingleplayerContext world = context.worldBuilder().create()) {
@@ -34,17 +35,24 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             world.getServer().runCommand("gamemode spectator @a");
             world.getServer().runCommand("time set noon");
 
-            loadingScreen(context);
-            night(context, world);
-            visit(context, world, "ground", 0, 40, 0, null);
-            visit(context, world, "y1000", 0, 1010, 0,
+            if (stage("loading")) loadingScreen(context);
+            if (stage("night")) night(context, world);
+            if (stage("ground")) visit(context, world, "ground", 0, 40, 0, null);
+            if (stage("y1000")) visit(context, world, "y1000", 0, 1010, 0,
                     new String[] { "fill -10 1000 -10 10 1000 10 minecraft:diamond_block", "summon minecraft:pig 3 1001 3" });
-            visit(context, world, "y-300", 0, -290, 0,
+            if (stage("y-300")) visit(context, world, "y-300", 0, -290, 0,
                     new String[] { "fill -10 -299 -10 10 -280 10 minecraft:air", "fill -10 -300 -10 10 -300 10 minecraft:emerald_block",
                             "setblock 0 -295 3 minecraft:glowstone" });
-            randomTicks(context, world, "ticks-y1000", 1000, true);
-            randomTicks(context, world, "ticks-y-300", -300, false);
+            if (stage("ticks")) randomTicks(context, world, "ticks-y1000", 1000, true);
+            if (stage("ticks")) randomTicks(context, world, "ticks-y-300", -300, false);
+            if (stage("thunder")) thunder(context, world);
         }
+    }
+
+    /** Whether to run a stage: all of them, or those named in the CC_GT_ONLY environment variable (comma separated). */
+    private static boolean stage(String name) {
+        String only = System.getenv("CC_GT_ONLY");
+        return only == null || only.isBlank() || java.util.Arrays.asList(only.split(",")).contains(name);
     }
 
     /** Natural spawning at night around a survival player standing on the cubic terrain: what spawned, and where. */
@@ -142,6 +150,92 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         });
         LOGGER.info("[cc-gametest] {}: {}", name, report);
         context.takeScreenshot("cc-" + name);
+    }
+
+    private static final java.util.List<BlockPos> BOLTS = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private static volatile boolean countingBolts;
+
+    static {
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (countingBolts && entity instanceof net.minecraft.world.entity.LightningBolt) {
+                BOLTS.add(entity.blockPosition());
+            }
+        });
+    }
+
+    /**
+     * A thunderstorm over the old surface: where natural strikes land (on top of the ground, under the open sky). Then a lightning rod on
+     * the ground draws a strike from a few blocks away.
+     */
+    private static void thunder(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("tp @a 0 60 0 0 60");
+        context.waitTicks(LOAD_TICKS);
+        // thunder, like spawning, only rolls near players who aren't spectators
+        world.getServer().runCommand("gamemode survival @a");
+        world.getServer().runCommand("effect give @a minecraft:resistance infinite 255 true");
+        world.getServer().runCommand("effect give @a minecraft:fire_resistance infinite 0 true");
+        world.getServer().runCommand("weather thunder");
+        BOLTS.clear();
+        countingBolts = true;
+        context.waitTicks(THUNDER_TICKS);
+        countingBolts = false;
+        String natural = world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            StringBuilder out = new StringBuilder(BOLTS.size() + " natural strikes in " + THUNDER_TICKS + " ticks:");
+            for (BlockPos bolt : BOLTS) {
+                out.append(" ").append(bolt.toShortString()).append(" on ").append(level.getBlockState(bolt.below()).getBlock().getName().getString())
+                        .append(level.canSeeSky(bolt) ? " (sky)" : " (no sky)");
+            }
+            return out.toString();
+        });
+        LOGGER.info("[cc-gametest] thunder: {}", natural);
+
+        String columns = world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            StringBuilder out = new StringBuilder();
+            int[][] spots = { { 10, 30 }, { -25, 12 }, { 33, -18 }, { -40, -40 }, { 5, 45 } };
+            for (int[] spot : spots) {
+                int x = spot[0];
+                int z = spot[1];
+                java.util.List<String> strikes = new java.util.ArrayList<>();
+                for (int cubeY = -4; cubeY <= 6; cubeY++) {
+                    var cube = ((io.github.opencubicchunks.cubicchunks.world.level.CubicLevel) level).cc_getCube(
+                            io.github.opencubicchunks.cc_core.utils.Coords.blockToCube(x), cubeY, io.github.opencubicchunks.cc_core.utils.Coords.blockToCube(z));
+                    var bolt = io.github.opencubicchunks.cubicchunks.world.level.CubicThunder.strikeIn(level, cube, x, z);
+                    if (bolt != null) {
+                        strikes.add("cube " + cubeY + " -> " + bolt.blockPosition().toShortString());
+                    }
+                }
+                out.append(" [").append(x).append(",").append(z).append(" ground top ").append(surface(level, x, z).getY()).append(": ")
+                        .append(strikes).append("]");
+            }
+            return out.toString();
+        });
+        LOGGER.info("[cc-gametest] thunder columns:{}", columns);
+
+        String rod = world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            BlockPos rodPos = surface(level, 20, 20);
+            level.setBlockAndUpdate(rodPos, net.minecraft.world.level.block.Blocks.LIGHTNING_ROD.asList().get(0).defaultBlockState());
+            BlockPos from = surface(level, 26, 24);
+            var bolt = io.github.opencubicchunks.cubicchunks.world.level.CubicThunder.strikeNear(level, from);
+            return "rod at " + rodPos.toShortString() + ", strike from " + from.toShortString() + " landed at "
+                    + (bolt == null ? "nothing" : bolt.blockPosition().toShortString());
+        });
+        LOGGER.info("[cc-gametest] thunder rod: {}", rod);
+        context.waitTicks(10);
+        context.takeScreenshot("cc-thunder");
+        world.getServer().runCommand("weather clear");
+        world.getServer().runCommand("gamemode spectator @a");
+    }
+
+    /** The air block above the highest block of x, z below Y 200. */
+    private static BlockPos surface(net.minecraft.server.level.ServerLevel level, int x, int z) {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, 200, z);
+        while (level.getBlockState(pos).isAir() && pos.getY() > -200) {
+            pos.move(0, -1, 0);
+        }
+        return pos.above();
     }
 
     private static String fill(int x1, int y1, int z1, int x2, int y2, int z2, String block) {

@@ -7,6 +7,7 @@ import java.util.concurrent.Executor;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import io.github.notstirred.dasm.api.annotations.Dasm;
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddMethodToSets;
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddTransformToSets;
@@ -97,11 +98,27 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
         CubicRandomTicks.tickCube((ServerLevel) (Object) this, levelCube, randomTickSpeed);
     }
 
-    /** A cube gives tickPrecipitation the surface it found itself (see CubicRandomTicks); a cubic column keeps no heightmap to look it up in. */
-    @WrapOperation(method = "tickPrecipitation", at = @At(value = "INVOKE",
+    /**
+     * A cube gives tickPrecipitation and findLightningTargetAround the surface it found itself (see CubicRandomTicks and CubicThunder); a cubic
+     * column keeps no heightmap to look it up in.
+     */
+    @WrapOperation(method = { "tickPrecipitation", "findLightningTargetAround" }, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerLevel;getHeightmapPos(Lnet/minecraft/world/level/levelgen/Heightmap$Types;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/core/BlockPos;"))
     private BlockPos cc_cubeSurface(ServerLevel level, Heightmap.Types type, BlockPos pos, Operation<BlockPos> original) {
         return cc_isCubic ? pos : original.call(level, type, pos);
+    }
+
+    /**
+     * Vanilla's lightning rods draw strikes only from the top of their column (WORLD_SURFACE heightmap); in a cubic level, a rod whose top
+     * sees the sky.
+     */
+    @WrapOperation(method = "lambda$findLightningRod$1", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ServerLevel;getHeight(Lnet/minecraft/world/level/levelgen/Heightmap$Types;II)I"))
+    private int cc_rodOnTop(ServerLevel level, Heightmap.Types type, int x, int z, Operation<Integer> original, @Local(argsOnly = true) BlockPos rodPos) {
+        if (!cc_isCubic) {
+            return original.call(level, type, x, z);
+        }
+        return level.canSeeSky(rodPos.above()) ? rodPos.getY() + 1 : Integer.MIN_VALUE;
     }
 
     // TODO (P2) waitForChunkAndEntities
