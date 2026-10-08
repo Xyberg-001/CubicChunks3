@@ -8,6 +8,7 @@ import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.world.level.CloPos;
 import io.github.opencubicchunks.cubicchunks.MarkableAsCubic;
+import io.github.opencubicchunks.cubicchunks.server.level.CubeYRange;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicTicketStorage;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
@@ -36,7 +37,7 @@ import org.spongepowered.asm.mixin.injection.At;
  */
 @Dasm(value = ChunkToCloSet.class, target = @Ref(DistanceManager.class))
 @Mixin(DistanceManager.class)
-public abstract class MixinDistanceManager implements MarkableAsCubic {
+public abstract class MixinDistanceManager implements MarkableAsCubic, CubeYRange {
     protected boolean cc_isCubic;
 
     @Shadow @Final private LoadingChunkTracker loadingChunkTracker;
@@ -54,6 +55,11 @@ public abstract class MixinDistanceManager implements MarkableAsCubic {
 
     @Override public boolean cc_isCubic() {
         return cc_isCubic;
+    }
+
+    /** Only the loading tracker needs the level's heights: it decides which cubes load, whatever the other trackers give them. */
+    @Override public void cc_setCubeYRange(int minCubeY, int maxCubeY) {
+        ((CubeYRange) this.loadingChunkTracker).cc_setCubeYRange(minCubeY, maxCubeY);
     }
 
     /**

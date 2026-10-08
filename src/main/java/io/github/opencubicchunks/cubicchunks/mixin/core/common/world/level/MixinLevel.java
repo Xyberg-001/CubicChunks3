@@ -10,7 +10,6 @@ import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import io.github.notstirred.dasm.api.annotations.Dasm;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.opencubicchunks.cc_core.utils.Coords;
-import io.github.opencubicchunks.cubicchunks.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.MarkableAsCubic;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
@@ -18,7 +17,11 @@ import io.github.opencubicchunks.cubicchunks.world.level.CubicLevel;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
+import io.github.opencubicchunks.cubicchunks.world.CubicWorldSettings;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.world.entity.Entity;
@@ -31,6 +34,8 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkSource;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.storage.WritableLevelData;
 import net.minecraft.world.level.material.FluidState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -43,10 +48,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Dasm(value = ChunkToCloSet.class, target = @Ref(Level.class))
 @Mixin(Level.class)
-public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAccessor {
+public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAccessor, CubicHeight.BuildHeight {
     @Shadow public abstract @Nullable ChunkAccess getChunk(int chunkX, int chunkZ, ChunkStatus requestedStatus, boolean forceLoad);
 
     protected boolean cc_isCubic;
+    /** The heights a cubic level holds: its world's choice (see CubicWorldSettings). */
+    private int cc_minBuildY;
+    private int cc_maxBuildY;
 
     @Override public void cc_setCubic() {
         cc_isCubic = true;
@@ -56,13 +64,21 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
         return cc_isCubic;
     }
 
+    @Override public int cc_minBuildY() {
+        return cc_isCubic ? cc_minBuildY : this.getMinY();
+    }
+
+    @Override public int cc_maxBuildY() {
+        return cc_isCubic ? cc_maxBuildY : this.getMaxY();
+    }
+
     /**
-     * A cubic world holds blocks from {@link CubicHeight#minY} to {@link CubicHeight#maxY}, whatever its dimension type says (its columns
+     * A cubic world holds blocks between the heights its world was made with (see CubicWorldSettings), whatever its dimension type says (its columns
      * keep the dimension's height for what they still size by it); other worlds as vanilla.
      */
     @Override public boolean isOutsideBuildHeight(int y) {
         if (cc_isCubic) {
-            return y < CubicHeight.minY() || y > CubicHeight.maxY();
+            return y < cc_minBuildY || y > cc_maxBuildY;
         }
         return y < this.getMinY() || y > this.getMaxY();
     }
@@ -100,10 +116,17 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
         }
     }
 
+    /** A level is cubic if its world is: the server's world, or for a client level the server it joined (see CubicWorldSettings). */
     @Inject(method = "<init>", at = @At(value = "CTOR_HEAD"))
-    private void cc_init(CallbackInfo ci) {
-        if (CubicChunks.config().shouldGenerateNewWorldsAsCC()) {
+    private void cc_init(
+            WritableLevelData levelData, ResourceKey<Level> dimension, RegistryAccess registryAccess, Holder<DimensionType> dimensionType,
+            boolean isClientSide, boolean isDebug, long biomeZoomSeed, int maxChainedNeighborUpdates, CallbackInfo ci
+    ) {
+        CubicWorldSettings settings = CubicWorldSettings.forNewLevel(isClientSide);
+        if (settings.cubic()) {
             this.cc_setCubic();
+            this.cc_minBuildY = settings.minY();
+            this.cc_maxBuildY = settings.maxY();
         }
     }
 

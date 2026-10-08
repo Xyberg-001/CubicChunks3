@@ -7,14 +7,15 @@ import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 
 /**
- * Packs block positions as 25 bits of x, 25 of z and 14 of Y instead of 26, 26 and 12, so a cubic world reaches Y -8192..8191 (see
- * {@link CubicHeight}). BlockPos works the split out from the horizontal size it is given; this gives it a smaller one. It applies to every
- * world, as packed positions are shared code: Level's horizontal bounds shrink to match (see MixinLevel).
+ * Packs block positions with more bits for Y than vanilla's 26, 26 and 12 (25, 25 and 14, or 24, 24 and 16 with the tall height limit; see
+ * {@link CubicHeight}). BlockPos works the split out from the horizontal size it is given; this gives it a smaller one, read from the config
+ * as BlockPos is first loaded. It applies to every world, as packed positions are shared code: Level's horizontal bounds shrink to match
+ * (see MixinLevel).
  */
 @Mixin(BlockPos.class)
 public class MixinBlockPos {
     @ModifyConstant(method = "<clinit>", constant = @Constant(intValue = 30000000))
     private static int cc_packingHorizontalSize(int size) {
-        return CubicHeight.PACKING_HORIZONTAL_SIZE;
+        return CubicHeight.packingHorizontalSize();
     }
 }

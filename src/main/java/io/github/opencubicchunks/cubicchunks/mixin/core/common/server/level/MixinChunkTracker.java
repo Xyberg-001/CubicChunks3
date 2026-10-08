@@ -1,5 +1,6 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cc_core.world.level.CloPos;
 import io.github.opencubicchunks.cubicchunks.MarkableAsCubic;
@@ -15,6 +16,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -68,12 +70,32 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
         return levelCount - 1;
     }
 
+    /** The lowest level this cube can hold in this tracker (none by default; see {@link MixinLoadingChunkTracker}). */
+    protected int cc_cubeLevelFloor(long cube) {
+        return 0;
+    }
+
     @Shadow protected abstract int getLevelFromSource(long to);
+
+    /**
+     * A ticket's level reaches its position without {@link #computeLevelFromNeighbor} (vanilla's update hands it straight on), so the cube
+     * floor and cap apply here too: without it a player beyond a level's heights put the cubes there at their ticket level, and the edge
+     * cubes' generation then wanted neighbours the floor had left without a holder.
+     */
+    @ModifyVariable(method = "update", at = @At("HEAD"), argsOnly = true)
+    private int cc_capSourceLevel(int newLevelFrom, @Local(argsOnly = true) long node) {
+        if (!cc_isCubic || !CloPos.isCube(node)) {
+            return newLevelFrom;
+        }
+        int level = Math.max(newLevelFrom, this.cc_cubeLevelFloor(node));
+        return level > cc_maxCubeLevel() ? levelCount - 1 : level;
+    }
 
     /**
      * Vanilla's rule (a neighbour's level plus one; the source's own level from {@link #getLevelFromSource}), and in a cubic level:
      * <ul>
      * <li>a cube passes its level on to its columns unchanged;</li>
+     * <li>a cube never gets a level below {@link #cc_cubeLevelFloor} (cubes beyond the level's heights);</li>
      * <li>a cube never gets a level above {@link #cc_maxCubeLevel}. In the loading tracker cubes load only up to the cube load limit, below
      * the column one, and a cube's level there is read back from its holder: a cube given a level between the two had none (so read back as
      * unloaded) yet held up the columns beneath it, and when its ticket went the tracker saw no change, so those columns never unloaded.</li>
@@ -90,7 +112,11 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
             return from == ChunkPos.INVALID_CHUNK_POS ? this.getLevelFromSource(to) : fromLevel + 1;
         }
         int level = from == CloPos.INVALID_CLO_POS ? this.getLevelFromSource(to) : fromLevel + (CloPos.isCube(from) && CloPos.isChunk(to) ? 0 : 1);
-        return CloPos.isCube(to) && level > cc_maxCubeLevel() ? levelCount - 1 : level;
+        if (!CloPos.isCube(to)) {
+            return level;
+        }
+        level = Math.max(level, this.cc_cubeLevelFloor(to));
+        return level > cc_maxCubeLevel() ? levelCount - 1 : level;
     }
 
     @Inject(method = "checkNeighborsAfterUpdate", at = @At("HEAD"), cancellable = true)
@@ -168,7 +194,7 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
             }
             cir.setReturnValue(out);
         } else {
-            // computeLevelFromNeighbor for each neighbour, with the cap applied once (the smallest capped level is the capped smallest)
+            // computeLevelFromNeighbor for each neighbour, with the floor and cap applied once (they depend on this cube alone)
             int out = level;
             int x = CloPos.extractX(pos);
             int y = CloPos.extractY(pos);
@@ -195,6 +221,7 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
                     }
                 }
             }
+            out = Math.max(out, this.cc_cubeLevelFloor(pos));
             cir.setReturnValue(out > cc_maxCubeLevel() ? levelCount - 1 : out);
         }
     }

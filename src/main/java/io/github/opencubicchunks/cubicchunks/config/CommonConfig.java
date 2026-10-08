@@ -16,7 +16,17 @@ public class CommonConfig extends BaseConfig {
     private static final String KEY_GENERAL = "general";
     private static final String KEY_VERTICAL_VIEW_DISTANCE = KEY_GENERAL + ".verticalViewDistance";
     private static final int DEFAULT_VERTICAL_VIEW_DISTANCE = 8;
+    private static final String KEY_HEIGHT_LIMIT = KEY_GENERAL + ".heightLimit";
     private static final String KEY_GENERATE_NEW_WORLDS_AS_CC = KEY_GENERAL + ".generateNewWorldsAsCC";
+    private static final String KEY_NEW_WORLD_MIN_Y = KEY_GENERAL + ".newWorldMinY";
+    private static final String KEY_NEW_WORLD_MAX_Y = KEY_GENERAL + ".newWorldMaxY";
+
+    /** The height limits the game can run with (see {@link #getHeightLimit}). */
+    public static final int HEIGHT_LIMIT_NORMAL = 8192;
+    public static final int HEIGHT_LIMIT_TALL = 32768;
+    /** A new cubic world's heights unless chosen otherwise: within the normal limit, less the few hundred blocks it keeps free at each end. */
+    public static final int DEFAULT_NEW_WORLD_MIN_Y = -7500;
+    public static final int DEFAULT_NEW_WORLD_MAX_Y = 7500;
 
     private final CommentedConfig config;
 
@@ -32,11 +42,27 @@ public class CommonConfig extends BaseConfig {
         config.setComment(KEY_VERTICAL_VIEW_DISTANCE, """
                  The vertical view distance for players in Cubic Chunks dimensions (similar to vanilla render distance for the horizontal axes).\
                 """);
-        config.set(KEY_GENERATE_NEW_WORLDS_AS_CC, true);
-        config.setComment(KEY_GENERATE_NEW_WORLDS_AS_CC,
-                """
-                         Whether or not newly-created worlds generate using Cubic Chunks. (On the client, this is toggled by the button in the world creation GUI.)\
-                        """);
+        config.set(KEY_HEIGHT_LIMIT, HEIGHT_LIMIT_NORMAL);
+        config.setComment(KEY_HEIGHT_LIMIT, """
+                 How high and deep any cubic world can reach, read when the game starts (a change needs a restart). Block positions are packed into
+                 64 bits everywhere, so height and horizontal reach trade off:
+                     8192  - cubic worlds can hold up to about Y -7900 to 7900, and x and z reach about 16.7 million blocks from the centre.
+                     32768 - cubic worlds can hold up to about Y -32400 to 32400, and x and z reach about 8.4 million blocks from the centre.
+                 (A few hundred blocks at each end are kept free: cubes just beyond a world's heights load too.) A server and the players joining it
+                 must use the same value; a world made for 32768 needs it to load.\
+                """);
+        config.set(KEY_GENERATE_NEW_WORLDS_AS_CC, false);
+        config.setComment(KEY_GENERATE_NEW_WORLDS_AS_CC, """
+                 Whether a new world uses Cubic Chunks: on a server, the world it makes when there is none; on the client, the default of the
+                 switch in the world creation screen's Cubic Chunks tab. Each world keeps the choice it was made with (cubicchunks/world.toml in its
+                 folder), so changing this never changes an existing world.\
+                """);
+        config.set(KEY_NEW_WORLD_MIN_Y, DEFAULT_NEW_WORLD_MIN_Y);
+        config.set(KEY_NEW_WORLD_MAX_Y, DEFAULT_NEW_WORLD_MAX_Y);
+        config.setComment(KEY_NEW_WORLD_MIN_Y, """
+                 The lowest and highest Y a new cubic world holds (within heightLimit): the default for the world creation screen, and what a
+                 server's new world gets.\
+                """);
         return config;
     }
 
@@ -50,8 +76,21 @@ public class CommonConfig extends BaseConfig {
         return config.getInt(KEY_VERTICAL_VIEW_DISTANCE);
     }
 
+    /** {@link #HEIGHT_LIMIT_NORMAL} or {@link #HEIGHT_LIMIT_TALL}: any other value is read as the normal limit. */
+    public int getHeightLimit() {
+        return config.getInt(KEY_HEIGHT_LIMIT) == HEIGHT_LIMIT_TALL ? HEIGHT_LIMIT_TALL : HEIGHT_LIMIT_NORMAL;
+    }
+
     public boolean shouldGenerateNewWorldsAsCC() {
         return config.get(KEY_GENERATE_NEW_WORLDS_AS_CC);
+    }
+
+    public int getNewWorldMinY() {
+        return config.getInt(KEY_NEW_WORLD_MIN_Y);
+    }
+
+    public int getNewWorldMaxY() {
+        return config.getInt(KEY_NEW_WORLD_MAX_Y);
     }
 
     public void setVerticalViewDistance(int verticalViewDistance) {

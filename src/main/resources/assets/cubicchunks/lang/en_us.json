@@ -1,3 +1,10 @@
 {
-    "selectWorld.cubicChunks": "Use Cubic Chunks"
+    "createWorld.tab.cubicchunks.title": "Cubic Chunks",
+    "selectWorld.cubicChunks": "Cubic Chunks",
+    "selectWorld.cubicChunks.info": "Stores the world in 32-block cubes, so it can be far taller and deeper than vanilla. Fixed once the world is made; players need Cubic Chunks to join it.",
+    "selectWorld.cubicChunks.minY": "Lowest Y",
+    "selectWorld.cubicChunks.maxY": "Highest Y",
+    "selectWorld.cubicChunks.range": "Cubic worlds in this game can reach from Y %s to %s. The heightLimit setting in config/cubicchunks_common.toml decides this (restart to change it).",
+    "disconnect.cubicchunks.heightLimit": "This server runs Cubic Chunks with heightLimit %s and this game runs it with %s. Set the same value in config/cubicchunks_common.toml and restart.",
+    "disconnect.cubicchunks.vanillaServer": "This server doesn't run Cubic Chunks. With Cubic Chunks installed, this game reads block positions differently, so it can't play there."
 }

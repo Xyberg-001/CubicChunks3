@@ -1,6 +1,11 @@
 package io.github.opencubicchunks.cubicchunks.gametest;
 
+import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
+import io.github.opencubicchunks.cubicchunks.client.gui.screens.worldselection.CubicWorldCreation;
+import io.github.opencubicchunks.cubicchunks.server.level.CubeYRange;
+import io.github.opencubicchunks.cubicchunks.world.CubicWorldSettings;
+import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -15,6 +20,7 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ChunkLevel;
 import net.minecraft.server.level.progress.ChunkLoadStatusView;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -29,9 +35,10 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
     private static final int THUNDER_TICKS = 1200;
 
     @Override public void runTest(ClientGameTestContext context) {
-        try (TestSingleplayerContext world = context.worldBuilder().create()) {
+        try (TestSingleplayerContext world = context.worldBuilder().adjustSettings(s -> ((CubicWorldCreation) s).cc_setCubic(true)).create()) {
             boolean cubic = context.computeOnClient(mc -> ((CanBeCubic) mc.level).cc_isCubic());
-            LOGGER.info("[cc-gametest] client level cubic: {}", cubic);
+            LOGGER.info("[cc-gametest] client level cubic: {}, world settings {}", cubic,
+                    world.getServer().computeOnServer(s -> CubicWorldSettings.server()));
             world.getServer().runCommand("gamemode spectator @a");
             world.getServer().runCommand("time set noon");
 
@@ -54,6 +61,79 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("lightsync")) lightSync(context, world);
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
+        }
+        if (stage("vanillaworld")) vanillaWorld(context);
+        if (stage("worldheight")) worldHeight(context);
+    }
+
+    /**
+     * A world made with the Cubic Chunks switch off stays vanilla: neither the server's levels nor the client's are cubic, it keeps the
+     * dimension's heights, and the chunks load and save as vanilla's.
+     */
+    private static void vanillaWorld(ClientGameTestContext context) {
+        try (TestSingleplayerContext world = context.worldBuilder().adjustSettings(s -> ((CubicWorldCreation) s).cc_setCubic(false)).create()) {
+            world.getServer().runCommand("gamemode spectator @a");
+            world.getServer().runCommand("tp @a 0 -50 0"); // test worlds are superflat: the ground is at Y -61
+            context.waitTicks(LOAD_TICKS);
+            world.getServer().runCommand("setblock 0 -55 0 minecraft:diamond_block");
+            context.waitTicks(20);
+            String server = world.getServer().computeOnServer(s -> {
+                var level = s.overworld();
+                return "settings " + CubicWorldSettings.server() + ", server level cubic " + ((CanBeCubic) level).cc_isCubic() + ", Y "
+                        + level.getMinY() + ".." + level.getMaxY() + ", outside build height at 400: " + level.isOutsideBuildHeight(400)
+                        + ", chunks loaded " + level.getChunkSource().getLoadedChunksCount() + ", block at 0 -55 0 "
+                        + level.getBlockState(new BlockPos(0, -55, 0)).getBlock();
+            });
+            String client = context.computeOnClient(mc -> "client level cubic " + ((CanBeCubic) mc.level).cc_isCubic() + ", client chunks "
+                    + mc.level.getChunkSource().getLoadedChunksCount() + ", block at 0 -55 0 " + mc.level.getBlockState(new BlockPos(0, -55, 0)).getBlock());
+            LOGGER.info("[cc-gametest] vanilla world: {}; {}", server, client);
+            context.takeScreenshot("cc-vanilla-world");
+        }
+    }
+
+    /**
+     * A cubic world made to hold Y -1000 to 1000: nothing can be placed beyond those heights, and with a player above the top only the cubes
+     * just beyond it load (the edge's neighbours, full up to two cubes out, less after that, none past CubeYRange.CUBES_BEYOND).
+     */
+    private static void worldHeight(ClientGameTestContext context) {
+        try (TestSingleplayerContext world = context.worldBuilder().adjustSettings(s -> {
+            CubicWorldCreation choices = (CubicWorldCreation) s;
+            choices.cc_setCubic(true);
+            choices.cc_setMinY(-1000);
+            choices.cc_setMaxY(1000);
+        }).create()) {
+            world.getServer().runCommand("gamemode spectator @a");
+            world.getServer().runCommand("tp @a 0 990 0");
+            context.waitTicks(LOAD_TICKS);
+            world.getServer().runCommand("setblock 0 1000 0 minecraft:gold_block");
+            world.getServer().runCommand("setblock 0 1001 0 minecraft:gold_block");
+            world.getServer().runCommand("tp @a 0 1150 0");
+            context.waitTicks(LOAD_TICKS);
+            int top = Coords.blockToCube(1000);
+            String server = world.getServer().computeOnServer(s -> {
+                var level = s.overworld();
+                CubeSource cubes = (CubeSource) level.getChunkSource();
+                StringBuilder column = new StringBuilder();
+                for (int cubeY = top - 1; cubeY <= top + CubeYRange.CUBES_BEYOND + 2; cubeY++) {
+                    String state = cubes.cc_getCube(0, cubeY, 0, ChunkStatus.FULL, false) != null ? "full"
+                            : cubes.cc_getCube(0, cubeY, 0, ChunkStatus.EMPTY, false) != null ? "partial" : "none";
+                    column.append(' ').append(cubeY).append('=').append(state);
+                }
+                return "settings " + CubicWorldSettings.server() + ", outside build height at 1000/1001: " + level.isOutsideBuildHeight(1000) + "/"
+                        + level.isOutsideBuildHeight(1001) + ", blocks at 0 1000 0 / 0 1001 0: " + level.getBlockState(new BlockPos(0, 1000, 0)).getBlock()
+                        + " / " + level.getBlockState(new BlockPos(0, 1001, 0)).getBlock() + ", server cubes in column 0,0 (top " + top + ", "
+                        + CubeYRange.CUBES_BEYOND + " beyond):" + column;
+            });
+            String client = context.computeOnClient(mc -> {
+                CubeSource cubes = (CubeSource) mc.level.getChunkSource();
+                StringBuilder column = new StringBuilder();
+                for (int cubeY = top - 1; cubeY <= top + 4; cubeY++) {
+                    column.append(' ').append(cubeY).append('=').append(cubes.cc_getCube(0, cubeY, 0, ChunkStatus.FULL, false) != null);
+                }
+                return "client heights " + CubicHeight.minY(mc.level) + ".." + CubicHeight.maxY(mc.level) + ", client cubes held:" + column;
+            });
+            LOGGER.info("[cc-gametest] world height: {}; {}", server, client);
+            context.takeScreenshot("cc-world-height");
         }
     }
 

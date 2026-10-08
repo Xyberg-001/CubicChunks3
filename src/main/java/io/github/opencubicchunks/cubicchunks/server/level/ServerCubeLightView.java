@@ -38,7 +38,7 @@ public final class ServerCubeLightView implements CubeLightView {
 
     @Override public List<CubeAccess> cubesTopDown(int cubeX, int cubeZ) {
         List<CubeAccess> column = new ArrayList<>();
-        for (int cubeY = Coords.blockToCube(CubicHeight.maxY()); cubeY >= Coords.blockToCube(CubicHeight.minY()); cubeY--) {
+        for (int cubeY = Coords.blockToCube(CubicHeight.maxY(this.level)); cubeY >= Coords.blockToCube(CubicHeight.minY(this.level)); cubeY--) {
             CubeAccess cube = this.cube(cubeX, cubeY, cubeZ);
             if (cube != null) {
                 column.add(cube);

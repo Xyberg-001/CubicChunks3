@@ -32,6 +32,8 @@ import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
 import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
+import io.github.opencubicchunks.cubicchunks.server.level.CubeYRange;
+import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
 import io.github.opencubicchunks.cc_core.world.level.CloPos;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
 import io.github.opencubicchunks.cubicchunks.CubicChunks;
@@ -160,6 +162,7 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
                 }
             };
             ((MarkableAsCubic) distanceManager).cc_setCubic();
+            ((CubeYRange) distanceManager).cc_setCubeYRange(Coords.blockToCube(CubicHeight.minY(level)), Coords.blockToCube(CubicHeight.maxY(level)));
             cc_cubeStorage = new CubeStorage(levelStorageAccess.getDimensionPath(level.dimension()), level.dimension().identifier().toString());
         }
     }

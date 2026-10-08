@@ -6,6 +6,7 @@ import com.llamalad7.mixinextras.sugar.Local;
 import io.github.opencubicchunks.cc_core.world.SpawnPlaceFinder;
 import io.github.opencubicchunks.cubicchunks.CanBeCubic;
 import io.github.opencubicchunks.cubicchunks.server.level.progress.CubicChunkLoadStatusView;
+import io.github.opencubicchunks.cubicchunks.world.CubicWorldSettings;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -15,18 +16,36 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.storage.LevelStorageSource;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * The initial spawn in a cubic world. 26.3 takes the spawn chunk from the generator's origin and its height from the generator's spawn
  * height (falling back to the heightmap below the world's floor); in a cubic world the height comes from SpawnPlaceFinder, searching the
- * cubes, and the floor it is checked against is the cubic one. (26.x has no spawn chunks, so nothing loads a spawn area to count.)
+ * cubes, and the floor it is checked against is the cubic one. (26.x has no spawn chunks, so nothing loads a spawn area to count.) Whether
+ * the world is cubic at all is settled as the server creates its levels.
  */
 @Mixin(MinecraftServer.class)
 public abstract class MixinMinecraftServer {
+    @Shadow @Final protected LevelStorageSource.LevelStorageAccess storageSource;
+
+    /** Whether the world is cubic, and its heights, are settled before its levels are made (see CubicWorldSettings). */
+    @Inject(method = "createLevels", at = @At("HEAD"))
+    private void cc_decideWorldSettings(CallbackInfo ci) {
+        CubicWorldSettings.decideForServer(this.storageSource);
+    }
+
+    @Inject(method = "stopServer", at = @At("RETURN"))
+    private void cc_forgetWorldSettings(CallbackInfo ci) {
+        CubicWorldSettings.onServerStopped();
+    }
+
     @WrapOperation(method = "setInitialSpawn", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/chunk/ChunkGenerator;getSpawnHeight(Lnet/minecraft/world/level/LevelHeightAccessor;)I"))
     private static int cc_spawnHeightFromCubes(
@@ -43,7 +62,7 @@ public abstract class MixinMinecraftServer {
 
     @WrapOperation(method = "setInitialSpawn", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;getMinY()I"))
     private static int cc_spawnFloor(ServerLevel level, Operation<Integer> original) {
-        return ((CanBeCubic) level).cc_isCubic() ? CubicHeight.minY() : original.call(level);
+        return ((CanBeCubic) level).cc_isCubic() ? CubicHeight.minY(level) : original.call(level);
     }
 
     /** The loading screen's view of chunk loading also shows the cubes of a cubic level (see CubicChunkLoadStatusView). */

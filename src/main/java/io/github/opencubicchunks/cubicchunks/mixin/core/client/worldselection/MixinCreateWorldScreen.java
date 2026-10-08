@@ -1,37 +1,42 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.client.worldselection;
 
-import com.llamalad7.mixinextras.sugar.Local;
-import io.github.opencubicchunks.cubicchunks.CubicChunks;
-import io.github.opencubicchunks.cubicchunks.config.CommonConfig;
+import java.util.Arrays;
+
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import io.github.opencubicchunks.cubicchunks.client.gui.screens.worldselection.CubicWorldCreation;
+import io.github.opencubicchunks.cubicchunks.client.gui.screens.worldselection.CubicWorldTab;
+import io.github.opencubicchunks.cubicchunks.world.CubicWorldSettings;
+import net.minecraft.client.gui.components.tabs.MenuTabBar;
+import net.minecraft.client.gui.components.tabs.Tab;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
-import net.minecraft.client.gui.screens.worldselection.SwitchGrid;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(targets = "net.minecraft.client.gui.screens.worldselection.CreateWorldScreen$WorldTab")
-public class MixinCreateWorldScreen {
+/**
+ * The world creation screen gets a Cubic Chunks tab after vanilla's (see CubicWorldTab), and what it chose goes to the server that starts for
+ * the new world, which saves it with the world (see CubicWorldSettings).
+ */
+@Mixin(CreateWorldScreen.class)
+public abstract class MixinCreateWorldScreen {
+    @Shadow @Final private WorldCreationUiState uiState;
 
-    private static final Component CUBIC_CHUNKS = Component.translatable("selectWorld.cubicChunks");
-
-    private boolean cc_cubicChunks;
-
-    private boolean cc_isCubicChunks() {
-        return cc_cubicChunks;
+    @WrapOperation(method = "init", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/components/tabs/MenuTabBar$Builder;addTabs([Lnet/minecraft/client/gui/components/tabs/Tab;)"
+                    + "Lnet/minecraft/client/gui/components/tabs/MenuTabBar$Builder;"))
+    private MenuTabBar.Builder cc_addCubicChunksTab(MenuTabBar.Builder builder, Tab[] tabs, Operation<MenuTabBar.Builder> original) {
+        Tab[] withCubic = Arrays.copyOf(tabs, tabs.length + 1);
+        withCubic[tabs.length] = new CubicWorldTab(this.uiState);
+        return original.call(builder, withCubic);
     }
 
-    private void cc_setCubicChunks(boolean cubicChunks) {
-        this.cc_cubicChunks = cubicChunks;
-        CommonConfig config = CubicChunks.config();
-        config.setGenerateNewWorldsAsCC(cubicChunks);
-        config.markDirty();
-    }
-
-    @Inject(method = "<init>", at = @At(value = "INVOKE_ASSIGN", target = "Lnet/minecraft/client/gui/screens/worldselection/SwitchGrid$Builder;addSwitch(Lnet/minecraft/network/chat/Component;Ljava/util/function/BooleanSupplier;Ljava/util/function/Consumer;)Lnet/minecraft/client/gui/screens/worldselection/SwitchGrid$SwitchBuilder;", ordinal = 1))
-    private void cc_addCubicWorldGenButtonToCreateWorldScreen(CreateWorldScreen screen, CallbackInfo ci, @Local SwitchGrid.Builder builder) {
-        cc_cubicChunks = CubicChunks.config().shouldGenerateNewWorldsAsCC();
-        builder.addSwitch(CUBIC_CHUNKS, this::cc_isCubicChunks, this::cc_setCubicChunks);
+    @Inject(method = "onCreate", at = @At("HEAD"))
+    private void cc_rememberCubicChoice(CallbackInfo ci) {
+        CubicWorldSettings.setPendingNewWorld(((CubicWorldCreation) this.uiState).cc_settings());
     }
 }

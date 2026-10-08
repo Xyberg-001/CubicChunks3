@@ -47,10 +47,10 @@ public abstract class MixinEntity implements EntityCubePosGetter {
 
     @Shadow public abstract int getId();
 
-    /** In a cubic world the void starts below its floor (CubicHeight.minY), not the dimension type's: nothing above it falls out. */
+    /** In a cubic world the void starts below the floor its world was made with (CubicHeight.minY), not the dimension type's: nothing above it falls out. */
     @Redirect(method = "checkBelowWorld", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;getMinY()I"))
     private int cc_belowWorldFloor(Level level) {
-        return ((CanBeCubic) level).cc_isCubic() ? CubicHeight.minY() : level.getMinY();
+        return ((CanBeCubic) level).cc_isCubic() ? CubicHeight.minY(level) : level.getMinY();
     }
 
     @AddFieldToSets(containers = ChunkToCubeSet.Entity_redirects.class, field = "chunkPosition:Lnet/minecraft/world/level/ChunkPos;")
