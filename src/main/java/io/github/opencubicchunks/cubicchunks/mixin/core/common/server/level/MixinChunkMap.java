@@ -582,7 +582,8 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
             return false; // TODO (P2) save/load: columns
         }
         CubeAccess cube = cloAccess instanceof ImposterProtoClo imposter ? (CubeAccess) imposter.cc_getWrappedClo() : (CubeAccess) cloAccess;
-        if (!cube.tryMarkSaved()) {
+        boolean changed = cube.tryMarkSaved();
+        if (!changed && !cube.cc_inhabitedTimeUnsaved()) {
             return false;
         }
         CubePos cubePos = cloPos.cubePos();
@@ -597,7 +598,9 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
                 }
             }
             activeChunkWrites.incrementAndGet();
+            long inhabitedTime = cube.getInhabitedTime();
             CubeSerializer.Snapshot snapshot = CubeSerializer.copyOf(level, cube);
+            cube.cc_setSavedInhabitedTime(inhabitedTime);
             CompletableFuture<CompoundTag> tag = CompletableFuture.supplyAsync(snapshot::write, Util.backgroundExecutor());
             cc_cubeStorage.write(cubePos, tag::join).handle((ignored, throwable) -> {
                 if (throwable != null) {

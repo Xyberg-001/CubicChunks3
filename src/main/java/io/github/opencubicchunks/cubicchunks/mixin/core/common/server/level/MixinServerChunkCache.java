@@ -300,6 +300,11 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
         }
     }
 
+    @Override public @Nullable CubeAccess cc_getFullCubeNow(CubePos pos) {
+        ChunkHolder holder = this.getVisibleChunkIfPresent(CloPos.cubeAsLong(pos.getX(), pos.getY(), pos.getZ()));
+        return holder == null ? null : ((GenerationCloHolder) holder).cc_getCubeIfPresentUnchecked(ChunkStatus.FULL);
+    }
+
     @Override public boolean cc_isCubeBlockTicking(CubePos pos) {
         ChunkHolder holder = this.getVisibleChunkIfPresent(CloPos.cubeAsLong(pos.getX(), pos.getY(), pos.getZ()));
         return holder != null && holder.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING);

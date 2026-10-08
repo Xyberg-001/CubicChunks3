@@ -48,6 +48,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("thunder")) thunder(context, world);
             if (stage("scheduled")) scheduledTicks(context, world);
             if (stage("audit")) lightAudit(context, world);
+            if (stage("difficulty")) regionalDifficulty(context, world);
         }
     }
 
@@ -331,6 +332,45 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             }
             return bad + " light-stopping blocks with sky 15 of " + checked + " checked (" + badWithData + " in sections with sky data, " + badNoData
                     + " without), by Y " + badByY + "; at Y 0: " + examples;
+        });
+    }
+
+    /**
+     * Regional difficulty reads the inhabited time of the cube at a place: it grows while a player is near, and is still there after the
+     * cube was unloaded and saved while the player was away.
+     */
+    private static void regionalDifficulty(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos spot = new BlockPos(0, 60, 0);
+        world.getServer().runCommand("difficulty normal");
+        // inhabited time, like spawning, counts only players who aren't spectators
+        world.getServer().runCommand("gamemode survival @a");
+        world.getServer().runCommand("effect give @a minecraft:resistance infinite 255 true");
+        world.getServer().runCommand("tp @a 0 60 0");
+        context.waitTicks(LOAD_TICKS);
+        LOGGER.info("[cc-gametest] difficulty: before leaving {}", difficultyAt(world, spot));
+        world.getServer().runCommand("tp @a 0 1010 0");
+        world.getServer().runCommand("setblock 0 1009 0 minecraft:stone"); // to stand on while away
+        context.waitTicks(300);
+        String loaded = world.getServer().computeOnServer(server ->
+                ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) server.overworld().getChunkSource())
+                        .cc_getFullCubeNow(io.github.opencubicchunks.cc_core.api.CubePos.from(spot)) != null ? "yes" : "no");
+        LOGGER.info("[cc-gametest] difficulty: away, cube loaded {}", loaded);
+        world.getServer().runCommand("tp @a 0 60 0");
+        context.waitTicks(LOAD_TICKS);
+        LOGGER.info("[cc-gametest] difficulty: back {}", difficultyAt(world, spot));
+        // a cube lived in for 50 hours (vanilla's cap for inhabited time): Normal's local difficulty goes from 1.5 to 3.0
+        world.getServer().runOnServer(server -> ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) server.overworld().getChunkSource())
+                .cc_getFullCubeNow(io.github.opencubicchunks.cc_core.api.CubePos.from(spot)).setInhabitedTime(3_600_000L));
+        LOGGER.info("[cc-gametest] difficulty: lived in {}", difficultyAt(world, spot));
+        world.getServer().runCommand("gamemode spectator @a");
+    }
+
+    private static String difficultyAt(TestSingleplayerContext world, BlockPos pos) {
+        return world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            var difficulty = level.getCurrentDifficultyAt(pos);
+            return "inhabited " + io.github.opencubicchunks.cubicchunks.server.level.CubicInhabitedTime.at(level, pos) + " ticks, local difficulty "
+                    + String.format(java.util.Locale.ROOT, "%.3f", difficulty.getEffectiveDifficulty()) + " (game time " + level.getGameTime() + ")";
         });
     }
 

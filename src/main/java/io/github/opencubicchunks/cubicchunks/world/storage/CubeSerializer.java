@@ -221,6 +221,7 @@ public final class CubeSerializer {
                 LevelCube cube = new LevelCube(level, expected, UpgradeData.EMPTY, new LevelChunkTicks<>(ticks.blocks()),
                         new LevelChunkTicks<>(ticks.fluids()), inhabitedTime, sections, postLoad(level, blockEntities), null);
                 cube.setLightCorrect(lightCorrect);
+                cube.cc_setSavedInhabitedTime(inhabitedTime);
                 cube.setAllStarts(starts);
                 cube.setAllReferences(references);
                 addPostProcessing(cube);
@@ -230,6 +231,7 @@ public final class CubeSerializer {
             ProtoCube cube = new ProtoCube(expected, UpgradeData.EMPTY, sections, ProtoChunkTicks.load(ticks.blocks()),
                     ProtoChunkTicks.load(ticks.fluids()), level, level.palettedContainerFactory(), null);
             cube.setInhabitedTime(inhabitedTime);
+            cube.cc_setSavedInhabitedTime(inhabitedTime);
             cube.setPersistedStatus(status);
             if (status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT)) {
                 cube.setLightEngine(level.getChunkSource().getLightEngine());

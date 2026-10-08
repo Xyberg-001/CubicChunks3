@@ -5,6 +5,7 @@ import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.world.ticks.CubicLevelTicks;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.ticks.LevelTicks;
@@ -23,6 +24,7 @@ import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
 import io.github.opencubicchunks.cubicchunks.mixin.core.common.world.level.MixinLevel;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
+import io.github.opencubicchunks.cubicchunks.server.level.CubicInhabitedTime;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicServerLevel;
 import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicRandomTicks;
@@ -83,6 +85,12 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
         }
     }
 
+
+    /** Regional difficulty reads the time players spent near the cube at the position (see CubicInhabitedTime). */
+    @WrapOperation(method = "getCurrentDifficultyAt", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/ChunkAccess;getInhabitedTime()J"))
+    private long cc_cubeInhabitedTime(ChunkAccess chunk, Operation<Long> original, @Local(argsOnly = true) BlockPos pos) {
+        return cc_isCubic ? CubicInhabitedTime.at((ServerLevel) (Object) this, pos) : original.call(chunk);
+    }
 
     /** As vanilla's isPositionTickingWithEntitiesLoaded, for a cube: in block-ticking range, and its columns' entities loaded. */
     private boolean cc_isCubeTickingWithEntitiesLoaded(long cubeKey) {

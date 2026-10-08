@@ -63,6 +63,8 @@ public abstract class CubeAccess implements CloAccess {
     private volatile boolean isLightCorrect;
     protected final CubePos cubePos;
     private long inhabitedTime;
+    /** The inhabited time on disk (see {@link #cc_inhabitedTimeUnsaved}). */
+    private long cc_savedInhabitedTime;
     @Nullable @Deprecated
     private BiomeGenerationSettings carverBiomeSettings;
     // TODO (P3) NoiseChunk might need to be different
@@ -296,6 +298,19 @@ public abstract class CubeAccess implements CloAccess {
 
     @TransformFromMethod(value = "getBlendingData()Lnet/minecraft/world/level/levelgen/blending/BlendingData;", owner = @Ref(ChunkAccess.class))
     @Override public native @Nullable BlendingData getBlendingData();
+
+    /**
+     * Whether players spent time near the cube since it was last written. Vanilla does not count that as a change (ChunkAccess's
+     * incrementInhabitedTime leaves the chunk saved), relying on a column near players changing anyway; a cube of air or deep stone never
+     * does, so it would lose the time on unloading.
+     */
+    public boolean cc_inhabitedTimeUnsaved() {
+        return this.getInhabitedTime() != this.cc_savedInhabitedTime;
+    }
+
+    public void cc_setSavedInhabitedTime(long inhabitedTime) {
+        this.cc_savedInhabitedTime = inhabitedTime;
+    }
 
     @TransformFromMethod(value = "getInhabitedTime()J", owner = @Ref(ChunkAccess.class))
     @Override public native long getInhabitedTime();
