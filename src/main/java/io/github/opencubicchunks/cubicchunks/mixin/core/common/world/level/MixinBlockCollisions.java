@@ -35,8 +35,8 @@ public class MixinBlockCollisions {
             CollisionGetter collisionGetter, CollisionContext context, AABB box, boolean onlySuffocatingBlocks, BiFunction resultProvider,
             CallbackInfo ci
     ) {
-        // TODO probably don't cast without an instanceof check in production - for dev it's fine since it will tell us we're missing something
-        if (((CanBeCubic) collisionGetter).cc_isCubic()) {
+        // a getter that isn't a level (or doesn't know cubes) collides as in vanilla
+        if (collisionGetter instanceof CanBeCubic cubic && cubic.cc_isCubic() && collisionGetter instanceof CubicCollisionGetter) {
             cc_isCubic = true;
         }
     }

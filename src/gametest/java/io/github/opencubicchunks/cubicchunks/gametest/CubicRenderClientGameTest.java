@@ -25,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 public class CubicRenderClientGameTest implements FabricClientGameTest {
     private static final Logger LOGGER = LogManager.getLogger("cc-gametest");
     private static final int LOAD_TICKS = 200;
+    private static final int SPAWN_TICKS = 600;
 
     @Override public void runTest(ClientGameTestContext context) {
         try (TestSingleplayerContext world = context.worldBuilder().create()) {
@@ -34,6 +35,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             world.getServer().runCommand("time set noon");
 
             loadingScreen(context);
+            night(context, world);
             visit(context, world, "ground", 0, 40, 0, null);
             visit(context, world, "y1000", 0, 1010, 0,
                     new String[] { "fill -10 1000 -10 10 1000 10 minecraft:diamond_block", "summon minecraft:pig 3 1001 3" });
@@ -41,6 +43,40 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
                     new String[] { "fill -10 -299 -10 10 -280 10 minecraft:air", "fill -10 -300 -10 10 -300 10 minecraft:emerald_block",
                             "setblock 0 -295 3 minecraft:glowstone" });
         }
+    }
+
+    /** Natural spawning at night around a survival player standing on the cubic terrain: what spawned, and where. */
+    private static void night(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("gamemode survival @a");
+        world.getServer().runCommand("effect give @a minecraft:resistance infinite 255 true");
+        world.getServer().runCommand("gamerule spawn_mobs true"); // test worlds are made with mob spawning off
+        world.getServer().runCommand("gamerule spawn_monsters true");
+        // after the rules, a difficulty change updates the level's spawning flags (set while the test world had spawning off)
+        world.getServer().runCommand("difficulty peaceful");
+        world.getServer().runCommand("difficulty normal");
+        world.getServer().runCommand("time set midnight");
+        world.getServer().runCommand("tp @a 0 40 0");
+        context.waitTicks(SPAWN_TICKS);
+        String report = world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            var player = level.players().get(0);
+            var mobs = level.getEntitiesOfClass(net.minecraft.world.entity.Mob.class, player.getBoundingBox().inflate(128));
+            java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+            int minY = Integer.MAX_VALUE;
+            int maxY = Integer.MIN_VALUE;
+            for (var mob : mobs) {
+                counts.merge(mob.getType().getCategory().getName(), 1, Integer::sum);
+                minY = Math.min(minY, mob.blockPosition().getY());
+                maxY = Math.max(maxY, mob.blockPosition().getY());
+            }
+            var state = level.getChunkSource().getLastSpawnState();
+            return "player at " + player.blockPosition() + ", " + mobs.size() + " mobs within 128 " + counts + (mobs.isEmpty() ? "" : " at Y " + minY + ".." + maxY)
+                    + ", spawnable chunk count " + (state == null ? "?" : state.getSpawnableChunkCount() + " counts " + state.getMobCategoryCounts());
+        });
+        LOGGER.info("[cc-gametest] night: {}", report);
+        context.takeScreenshot("cc-night");
+        world.getServer().runCommand("gamemode spectator @a");
+        world.getServer().runCommand("time set noon");
     }
 
     /** The loading screen's map over the loaded world: a status view from the integrated server, focused where the player is. */
