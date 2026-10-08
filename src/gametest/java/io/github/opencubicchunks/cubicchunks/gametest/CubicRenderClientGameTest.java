@@ -52,6 +52,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("cliententities")) clientEntities(context, world);
             if (stage("tint")) tintCaches(context);
             if (stage("lightsync")) lightSync(context, world);
+            if (stage("scans")) blockScans(context, world);
         }
     }
 
@@ -550,6 +551,33 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             }
         }
         return out;
+    }
+
+    /**
+     * 26.x's block scans and entity fluid checks read chunk sections, which hold no blocks in a cubic level; they read the cubes instead: the
+     * ground under a player is found (the server's flying check), a pool counts as liquid, and a cow standing in it is in water.
+     */
+    private static void blockScans(ClientGameTestContext context, TestSingleplayerContext world) {
+        int x = 70;
+        int z = 70;
+        world.getServer().runCommand("tp @a " + x + " 60 " + z);
+        context.waitTicks(LOAD_TICKS);
+        int ground = world.getServer().computeOnServer(server -> surface(server.overworld(), x, z).getY());
+        world.getServer().runCommand(fill(x - 3, ground, z - 3, x + 3, ground + 3, z + 3, "stone"));
+        world.getServer().runCommand(fill(x - 2, ground + 1, z - 2, x + 2, ground + 3, z + 2, "water"));
+        world.getServer().runCommand("summon minecraft:cow " + x + " " + (ground + 1) + " " + z + " {NoAI:1b}");
+        context.waitTicks(20);
+        String report = world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            var pool = new net.minecraft.world.phys.AABB(x - 2, ground + 1, z - 2, x + 3, ground + 4, z + 3);
+            var rim = new net.minecraft.world.phys.AABB(x + 3, ground + 3, z, x + 3.9, ground + 3.9, z + 0.9); // the basin's stone rim
+            var cows = level.getEntitiesOfClass(net.minecraft.world.entity.animal.cow.Cow.class, pool.inflate(1));
+            return "pool has liquid " + level.containsAnyLiquid(pool) + ", the basin's rim found solid " + !level.findBlocksIn(rim)
+                    .filterState(net.minecraft.world.level.block.state.BlockBehaviour.BlockStateBase::isAir).allMatched()
+                    + ", cow in water " + (cows.isEmpty() ? "no cow" : cows.get(0).isInWater() + " (fluid height " + String.format(java.util.Locale.ROOT, "%.2f",
+                    cows.get(0).getFluidHeight(net.minecraft.tags.FluidTags.WATER)) + ")");
+        });
+        LOGGER.info("[cc-gametest] scans: {}", report);
     }
 
     /** The air block above the highest block of x, z below Y 200. */
