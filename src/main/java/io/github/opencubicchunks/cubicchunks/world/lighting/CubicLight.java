@@ -100,6 +100,29 @@ public final class CubicLight {
     }
 
     /**
+     * On the client, a cube arrived with the server's light, already queued to the engine (as vanilla's ClientPacketListener.enableChunkLight
+     * for a chunk): its sections join the engine and its columns are switched on; nothing is spread, the light being the server's. Where the
+     * sky starts in its columns is worked out again when next needed.
+     */
+    public void onCubeLitByServer(CubeAccess cube) {
+        CubeLightEngine engine = this.immediate.get();
+        CubePos cubePos = cube.cc_getCubePos();
+        LevelChunkSection[] sections = cube.getSections();
+        for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
+            for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
+                for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
+                    engine.updateSectionStatus(SectionPos.of(Coords.cubeToSection(cubePos.getX(), dx), Coords.cubeToSection(cubePos.getY(), dy),
+                            Coords.cubeToSection(cubePos.getZ(), dz)), sections[Coords.sectionToIndex(dx, dy, dz)].hasOnlyAir());
+                }
+            }
+        }
+        forEachColumn(cubePos, (chunkX, chunkZ) -> {
+            this.column(chunkX, chunkZ).sources().forgetAll();
+            engine.setLightEnabled(new ChunkPos(chunkX, chunkZ), true);
+        });
+    }
+
+    /**
      * A cube's saved light is about to be queued (as vanilla's SerializableChunkData.read does for a chunk): until the cube's light is
      * initialised, the engine keeps queued light for its columns even where a section drops out of storage meanwhile.
      */

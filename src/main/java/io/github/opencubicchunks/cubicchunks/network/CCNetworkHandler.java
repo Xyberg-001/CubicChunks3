@@ -11,5 +11,6 @@ public class CCNetworkHandler {
         PayloadTypeRegistry.clientboundPlay().register(CCClientboundLevelChunkPacket.TYPE, CCClientboundLevelChunkPacket.STREAM_CODEC);
         PayloadTypeRegistry.clientboundPlay().register(CCClientboundForgetLevelCloPacket.TYPE, CCClientboundForgetLevelCloPacket.STREAM_CODEC);
         PayloadTypeRegistry.clientboundPlay().register(CCClientboundSetCubeCacheCenterPacket.TYPE, CCClientboundSetCubeCacheCenterPacket.STREAM_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(CCClientboundCubeLightUpdatePacket.TYPE, CCClientboundCubeLightUpdatePacket.STREAM_CODEC);
     }
 }

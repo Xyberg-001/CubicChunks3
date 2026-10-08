@@ -24,21 +24,24 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.entity.player.Player;
 
-// TODO (P2) the name is currently a lie; no light data :)
-public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLevelCubePacketData cubeData) implements CustomPacketPayload {
+/** A cube and its light, as vanilla's ClientboundLevelChunkWithLightPacket is a chunk and its light. */
+public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLevelCubePacketData cubeData, CubeLightData light)
+        implements CustomPacketPayload {
     public static final Type<CCClientboundLevelCubeWithLightPacket> TYPE = new Type<>(
             Identifier.fromNamespaceAndPath(CubicChunks.MODID, "level_cube_with_light"));
 
     public static final StreamCodec<FriendlyByteBuf, CCClientboundLevelCubeWithLightPacket> STREAM_CODEC = StreamCodec.composite(
             CUBE_POS_STREAM_CODEC, CCClientboundLevelCubeWithLightPacket::pos, CCClientboundLevelCubePacketData.STREAM_CODEC,
-            CCClientboundLevelCubeWithLightPacket::cubeData, CCClientboundLevelCubeWithLightPacket::new);
+            CCClientboundLevelCubeWithLightPacket::cubeData, CubeLightData.STREAM_CODEC, CCClientboundLevelCubeWithLightPacket::light,
+            CCClientboundLevelCubeWithLightPacket::new);
 
     @Override public Type<? extends CustomPacketPayload> type() {
         return TYPE;
     }
 
     public CCClientboundLevelCubeWithLightPacket(LevelCube cube) {
-        this(cube.cc_getCloPos().cubePos(), new CCClientboundLevelCubePacketData(cube));
+        this(cube.cc_getCloPos().cubePos(), new CCClientboundLevelCubePacketData(cube),
+                CubeLightData.of(cube.getLevel().getLightEngine(), cube.cc_getCloPos().cubePos(), CubeLightData.ALL_SECTIONS));
     }
 
     public static class Handler implements CCPayloadHandler<CCClientboundLevelCubeWithLightPacket> {
@@ -59,14 +62,15 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
             ((ClientCubeCache) (level.getChunkSource())).cc_replaceWithPacketData(x, y, z, payload.cubeData.getReadBuffer(), heightmaps,
                     entityTagConsumer);
 
-            // TODO P2 :: light on the server (vanilla sends it with the chunk); until then the client lights cubes itself
+            // as vanilla's handleLevelChunkWithLight: the server's light goes to the engine, and the cube's sections join it, in order with
+            // other cubes' arriving and leaving
             ((ClientLevel) level).queueLightUpdate(() -> {
                 LevelCube levelCube = ((CubeSource) level.getChunkSource()).cc_getCube(x, y, z, false);
                 if (levelCube != null) {
-                    // the server sends no cube light: the client works it out (see CubicClientLight)
+                    payload.light.queueTo(((ClientLevel) level).getLightEngine(), payload.pos);
                     CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
                     if (light != null) {
-                        light.onCubeLoaded(levelCube, false);
+                        light.onCubeLitByServer(levelCube);
                     }
                     // as 26.3's enableChunkLight: the cube's sections and their neighbours are dirty now that it can render
                     int minSectionX = Coords.cubeToSection(x, 0);

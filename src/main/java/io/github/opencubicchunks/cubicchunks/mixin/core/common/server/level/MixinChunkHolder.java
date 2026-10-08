@@ -1,5 +1,11 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
+import io.github.opencubicchunks.cubicchunks.network.CCClientboundCubeLightUpdatePacket;
+import io.github.opencubicchunks.cubicchunks.network.CubeLightData;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.server.level.ServerPlayer;
+import java.util.List;
+import org.spongepowered.asm.mixin.Unique;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -121,7 +127,47 @@ public abstract class MixinChunkHolder extends MixinGenerationChunkHolder implem
     @Inject(method = "sectionLightChanged", at = @At("HEAD"), cancellable = true)
     public void cc_onSectionLightChanged(LightLayer lightLayer, int sectionY, CallbackInfoReturnable<Boolean> cir) {
         if (cc_cubePos != null) {
-            cir.setReturnValue(false); // TODO (P2) lighting
+            cir.setReturnValue(false); // a cube's sections are told apart by more than their Y: see cc_sectionLightChanged
+        }
+    }
+
+    /** The cube's sections whose light changed since the last broadcast, a bit per section index (vanilla keeps a BitSet per layer). */
+    @Unique private int cc_skyLightChanged;
+    @Unique private int cc_blockLightChanged;
+
+    @Override public boolean cc_sectionLightChanged(LightLayer layer, SectionPos sectionPos) {
+        // as vanilla's: only for a cube players can have (vanilla asks for the ticking chunk)
+        if (cc_cubePos == null || cc_getTickingCube() == null) {
+            return false;
+        }
+        int bit = 1 << Coords.sectionToIndex(sectionPos.x(), sectionPos.y(), sectionPos.z());
+        int before = layer == LightLayer.SKY ? this.cc_skyLightChanged : this.cc_blockLightChanged;
+        if ((before & bit) != 0) {
+            return false;
+        }
+        if (layer == LightLayer.SKY) {
+            this.cc_skyLightChanged |= bit;
+        } else {
+            this.cc_blockLightChanged |= bit;
+        }
+        return true;
+    }
+
+    /** Vanilla's light part of broadcastChanges, for a cube: every player tracking it gets the changed sections (see the packet). */
+    @Unique private void cc_broadcastCubeLight(LevelCube cube) {
+        int changed = this.cc_skyLightChanged | this.cc_blockLightChanged;
+        if (changed == 0) {
+            return;
+        }
+        this.cc_skyLightChanged = 0;
+        this.cc_blockLightChanged = 0;
+        List<ServerPlayer> players = this.cc_playerProvider.cc_getPlayers(cc_cubePos, false);
+        if (!players.isEmpty()) {
+            CCClientboundCubeLightUpdatePacket packet = new CCClientboundCubeLightUpdatePacket(cc_cubePos,
+                    CubeLightData.of(cube.getLevel().getLightEngine(), cc_cubePos, changed));
+            for (ServerPlayer player : players) {
+                ServerPlayNetworking.send(player, packet);
+            }
         }
     }
 
@@ -151,6 +197,7 @@ public abstract class MixinChunkHolder extends MixinGenerationChunkHolder implem
     @AddMethodToSets(containers = ChunkToCloSet.ChunkHolder_redirects.class, method = "broadcastChanges(Lnet/minecraft/world/level/chunk/LevelChunk;)V")
     public void cc_broadcastCloChanges(LevelClo clo) {
         if (cc_cubePos != null) {
+            cc_broadcastCubeLight((LevelCube) clo);
             cc_broadcastCubeChanges((LevelCube) clo);
         } else {
             broadcastChanges(((LevelChunk) clo));

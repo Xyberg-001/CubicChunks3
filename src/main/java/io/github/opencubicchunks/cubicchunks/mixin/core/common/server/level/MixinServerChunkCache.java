@@ -30,6 +30,7 @@ import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.GlobalSet;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicThreadedLightEngine;
+import io.github.opencubicchunks.cubicchunks.server.level.CubeHolder;
 import io.github.opencubicchunks.cubicchunks.server.level.GenerationCloHolder;
 import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache;
 import io.github.opencubicchunks.cubicchunks.server.level.ServerCubeLightView;
@@ -335,14 +336,17 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
 
     @Override @AddMethodToSets(containers = GlobalSet.ServerChunkCache_redirects.class, method = "onLightUpdate(Lnet/minecraft/world/level/LightLayer;Lnet/minecraft/core/SectionPos;)V")
     public void cc_onLightUpdate(LightLayer pType, SectionPos pPos) {
-        // as vanilla's ChunkHolder.sectionLightChanged: a cube whose light changed needs saving, light being saved with it. Nothing is sent:
-        // the client works out its own light (see CubicLight).
+        // as vanilla's onLightUpdate and ChunkHolder.sectionLightChanged: a cube whose light changed needs saving (its light is saved with it),
+        // and players who have it are sent the change
         this.mainThreadProcessor.execute(() -> {
             ChunkHolder holder = this.getVisibleChunkIfPresent(CloPos.cubeAsLong(Coords.sectionToCube(pPos.x()), Coords.sectionToCube(pPos.y()),
                     Coords.sectionToCube(pPos.z())));
             CloAccess cube = holder == null ? null : ((GenerationCloHolder) holder).cc_getLatestClo();
             if (cube != null) {
                 cube.markUnsaved();
+            }
+            if (holder != null && ((CubeHolder) holder).cc_sectionLightChanged(pType, pPos)) {
+                this.chunkHoldersToBroadcast.add(holder);
             }
         });
     }

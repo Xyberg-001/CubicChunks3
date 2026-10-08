@@ -51,6 +51,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("difficulty")) regionalDifficulty(context, world);
             if (stage("cliententities")) clientEntities(context, world);
             if (stage("tint")) tintCaches(context);
+            if (stage("lightsync")) lightSync(context, world);
         }
     }
 
@@ -470,6 +471,85 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         getLayer.setAccessible(true);
         int[] layer = (int[]) getLayer.invoke(column, pos.getY());
         layer[(pos.getZ() & 15) << 4 | (pos.getX() & 15)] = color;
+    }
+
+    /**
+     * The client's light is the server's: compared block by block around the player in the cubes the client holds, after arriving, after a
+     * shaft is dug with glowstone at the bottom (the client works that out too), and after a roof appears high above (which the client may
+     * not hold: it has only the server's word for the sky going dark below).
+     */
+    private static void lightSync(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("tp @a 0 40 0");
+        context.waitTicks(LOAD_TICKS);
+        LOGGER.info("[cc-gametest] light sync: arrived {}", compareLight(context, world, new BlockPos(0, 10, 0)));
+        world.getServer().runCommand("fill 5 -12 5 9 30 9 minecraft:air");
+        world.getServer().runCommand("setblock 7 -12 7 minecraft:glowstone");
+        context.waitTicks(60);
+        LOGGER.info("[cc-gametest] light sync: shaft {}", compareLight(context, world, new BlockPos(7, 0, 7)));
+        // a column no other stage builds over (their platforms at Y 1000 would roof it already)
+        BlockPos under = new BlockPos(-32, 30, 32);
+        int skyBefore = world.getServer().computeOnServer(server -> server.overworld().getBrightness(LightLayer.SKY, under));
+        world.getServer().runCommand("fill -40 200 24 -24 200 40 minecraft:stone");
+        context.waitTicks(100);
+        int skyAfter = world.getServer().computeOnServer(server -> server.overworld().getBrightness(LightLayer.SKY, under));
+        String clientSide = context.computeOnClient(mc -> "client sky " + mc.level.getBrightness(LightLayer.SKY, under) + ", client holds the roof's cube "
+                + (((io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource) mc.level.getChunkSource()).cc_getCube(-2, 6, 1,
+                        net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) != null));
+        LOGGER.info("[cc-gametest] light sync: sky under the roof (-32 30 32) on the server {} before the roof, {} after; {}", skyBefore, skyAfter, clientSide);
+        LOGGER.info("[cc-gametest] light sync: roof at Y 200 {}", compareLight(context, world, new BlockPos(-32, 10, 32)));
+    }
+
+    private static String compareLight(ClientGameTestContext context, TestSingleplayerContext world, BlockPos center) {
+        int r = 24;
+        int size = 2 * r + 1;
+        byte[][] server = world.getServer().computeOnServer(s -> readLight(s.overworld(), center, r));
+        byte[][] client = context.computeOnClient(mc -> readLight(mc.level, center, r));
+        int compared = 0;
+        int skyOff = 0;
+        int blockOff = 0;
+        java.util.List<String> examples = new java.util.ArrayList<>();
+        for (int i = 0; i < server[0].length; i++) {
+            if (client[0][i] < 0) {
+                continue; // the client does not hold that cube
+            }
+            compared++;
+            boolean sky = server[0][i] != client[0][i];
+            boolean block = server[1][i] != client[1][i];
+            if (sky) skyOff++;
+            if (block) blockOff++;
+            if ((sky || block) && examples.size() < 5) {
+                int dx = i % size - r;
+                int dz = (i / size) % size - r;
+                int dy = i / (size * size) - r;
+                examples.add(center.offset(dx, dy, dz).toShortString() + " sky " + server[0][i] + "/" + client[0][i] + " block " + server[1][i] + "/" + client[1][i]);
+            }
+        }
+        return compared + " blocks compared, sky differs at " + skyOff + ", block light at " + blockOff + (examples.isEmpty() ? "" : " (server/client: " + examples + ")");
+    }
+
+    /** Sky and block light around center, -1 where the level holds no cube. */
+    private static byte[][] readLight(net.minecraft.world.level.Level level, BlockPos center, int r) {
+        int size = 2 * r + 1;
+        byte[][] out = new byte[2][size * size * size];
+        var cubes = (io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource) level.getChunkSource();
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int i = 0;
+        for (int dy = -r; dy <= r; dy++) {
+            for (int dz = -r; dz <= r; dz++) {
+                for (int dx = -r; dx <= r; dx++, i++) {
+                    pos.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
+                    var cubePos = io.github.opencubicchunks.cc_core.api.CubePos.from(pos);
+                    if (cubes.cc_getCube(cubePos.getX(), cubePos.getY(), cubePos.getZ(), net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) == null) {
+                        out[0][i] = -1;
+                        out[1][i] = -1;
+                        continue;
+                    }
+                    out[0][i] = (byte) level.getBrightness(LightLayer.SKY, pos);
+                    out[1][i] = (byte) level.getBrightness(LightLayer.BLOCK, pos);
+                }
+            }
+        }
+        return out;
     }
 
     /** The air block above the highest block of x, z below Y 200. */

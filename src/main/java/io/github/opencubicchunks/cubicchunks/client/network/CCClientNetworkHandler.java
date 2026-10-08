@@ -1,5 +1,6 @@
 package io.github.opencubicchunks.cubicchunks.client.network;
 
+import io.github.opencubicchunks.cubicchunks.network.CCClientboundCubeLightUpdatePacket;
 import io.github.opencubicchunks.cubicchunks.network.CCClientboundForgetLevelCloPacket;
 import io.github.opencubicchunks.cubicchunks.network.CCClientboundLevelChunkPacket;
 import io.github.opencubicchunks.cubicchunks.network.CCClientboundLevelCubeWithLightPacket;
@@ -17,6 +18,7 @@ public class CCClientNetworkHandler {
         receive(CCClientboundLevelChunkPacket.TYPE, new CCClientboundLevelChunkPacket.Handler());
         receive(CCClientboundForgetLevelCloPacket.TYPE, new CCClientboundForgetLevelCloPacket.Handler());
         receive(CCClientboundSetCubeCacheCenterPacket.TYPE, new CCClientboundSetCubeCacheCenterPacket.Handler());
+        receive(CCClientboundCubeLightUpdatePacket.TYPE, new CCClientboundCubeLightUpdatePacket.Handler());
     }
 
     private static <T extends CustomPacketPayload> void receive(CustomPacketPayload.Type<T> type, CCPayloadHandler<T> handler) {
