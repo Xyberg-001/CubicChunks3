@@ -50,6 +50,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("audit")) lightAudit(context, world);
             if (stage("difficulty")) regionalDifficulty(context, world);
             if (stage("cliententities")) clientEntities(context, world);
+            if (stage("tint")) tintCaches(context);
         }
     }
 
@@ -419,6 +420,56 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             return "pig at " + pig.blockPosition().toShortString() + ", its cube held " + held + ", ticked " + (pig.tickCount - before[1]) + " times in 20 ticks; "
                     + mc.level.gatherChunkSourceStats();
         });
+    }
+
+    /**
+     * Biome colours cached on the client are dropped where an arriving cube can change them: a marker put in the cache stays at a spot
+     * far above the cube and three columns away, and gives way to the real colour in the cube.
+     */
+    private static void tintCaches(ClientGameTestContext context) {
+        String report = context.computeOnClient(mc -> {
+            try {
+                var level = mc.level;
+                var resolver = net.minecraft.client.renderer.BiomeColors.GRASS_COLOR_RESOLVER;
+                BlockPos inCube = new BlockPos(8, 40, 8);
+                BlockPos farAbove = new BlockPos(8, 40 + 200, 8);
+                BlockPos aside = new BlockPos(8 + 48, 40, 8);
+                int marker = 0x123456;
+                StringBuilder out = new StringBuilder();
+                for (BlockPos pos : new BlockPos[] { inCube, farAbove, aside }) {
+                    level.getBlockTint(pos, resolver);
+                    putInTintCache(level, resolver, pos, marker);
+                    out.append(pos.toShortString()).append(" cached ").append(level.getBlockTint(pos, resolver) == marker ? "marker" : "?").append("; ");
+                }
+                ((io.github.opencubicchunks.cubicchunks.client.multiplayer.CubicClientLevel) level).cc_onCubeLoaded(
+                        io.github.opencubicchunks.cc_core.api.CubePos.from(inCube));
+                out.append("after the cube arrives:");
+                for (BlockPos pos : new BlockPos[] { inCube, farAbove, aside }) {
+                    int color = level.getBlockTint(pos, resolver);
+                    out.append(" ").append(pos.toShortString()).append(color == marker ? " marker" : String.format(" #%06x", color & 0xFFFFFF));
+                }
+                return out.toString();
+            } catch (ReflectiveOperationException e) {
+                return "reflection failed: " + e;
+            }
+        });
+        LOGGER.info("[cc-gametest] tint: {}", report);
+    }
+
+    /** Test only: writes a colour straight into the client's tint cache layer for pos. */
+    private static void putInTintCache(net.minecraft.client.multiplayer.ClientLevel level, net.minecraft.world.level.ColorResolver resolver, BlockPos pos,
+            int color) throws ReflectiveOperationException {
+        var cachesField = net.minecraft.client.multiplayer.ClientLevel.class.getDeclaredField("tintCaches");
+        cachesField.setAccessible(true);
+        Object tintCache = ((java.util.Map<?, ?>) cachesField.get(level)).get(resolver);
+        var columnsField = net.minecraft.client.color.block.BlockTintCache.class.getDeclaredField("cache");
+        columnsField.setAccessible(true);
+        Object column = ((it.unimi.dsi.fastutil.longs.Long2ObjectMap<?>) columnsField.get(tintCache))
+                .get(net.minecraft.world.level.ChunkPos.pack(pos.getX() >> 4, pos.getZ() >> 4));
+        var getLayer = column.getClass().getDeclaredMethod("getLayer", int.class);
+        getLayer.setAccessible(true);
+        int[] layer = (int[]) getLayer.invoke(column, pos.getY());
+        layer[(pos.getZ() & 15) << 4 | (pos.getX() & 15)] = color;
     }
 
     /** The air block above the highest block of x, z below Y 200. */

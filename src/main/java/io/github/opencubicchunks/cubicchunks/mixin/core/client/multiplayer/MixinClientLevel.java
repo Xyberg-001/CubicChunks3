@@ -1,5 +1,9 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.client.multiplayer;
 
+import io.github.opencubicchunks.cubicchunks.client.color.block.CubicBlockTintCache;
+import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
+import net.minecraft.client.color.block.BlockTintCache;
+import net.minecraft.world.level.ColorResolver;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.entity.CubicEntitySections;
 import net.minecraft.world.entity.Entity;
@@ -22,6 +26,7 @@ import org.spongepowered.asm.mixin.Shadow;
 public abstract class MixinClientLevel extends MixinLevel implements CubicClientLevel {
     @Shadow @Final private ClientChunkCache chunkSource;
     @Shadow @Final private TransientEntitySectionManager<Entity> entityStorage;
+    @Shadow @Final private Object2ObjectArrayMap<ColorResolver, BlockTintCache> tintCaches;
 
     @Override public boolean cc_hasCube(int cubeX, int cubeY, int cubeZ) {
         return true;
@@ -35,8 +40,9 @@ public abstract class MixinClientLevel extends MixinLevel implements CubicClient
         }
     }
 
-    // TODO tint caches (vanilla's onChunkLoaded invalidates them for the chunk)
+    /** As vanilla's onChunkLoaded: biome colours worked out before the cube's biomes arrived go (see CubicBlockTintCache). */
     @Override public void cc_onCubeLoaded(CubePos cubePos) {
+        this.tintCaches.forEach((resolver, cache) -> ((CubicBlockTintCache) cache).cc_invalidateForCube(cubePos));
         ((CubicEntitySections.Manager) this.entityStorage).cc_updateCubeStatus(cubePos, Visibility.TICKING);
     }
 
