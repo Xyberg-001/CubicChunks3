@@ -1,6 +1,5 @@
 package io.github.opencubicchunks.cubicchunks.mixin.core.common.server.level;
 
-import com.llamalad7.mixinextras.sugar.Local;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cc_core.world.level.CloPos;
 import io.github.opencubicchunks.cubicchunks.MarkableAsCubic;
@@ -12,10 +11,10 @@ import net.minecraft.server.level.ChunkTracker;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.lighting.DynamicGraphMinFixedPoint;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -69,33 +68,39 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
         return levelCount - 1;
     }
 
-    /**
-     * A cube never gets a level above {@link #cc_maxCubeLevel}. In the loading tracker cubes load only up to the cube load limit, below the
-     * column one, and a cube's level there is read back from its holder: a cube given a level between the two had none (so read back as
-     * unloaded) yet held up the columns beneath it, and when its ticket went the tracker saw no change, so those columns never unloaded.
-     */
-    @Inject(method = "computeLevelFromNeighbor", at = @At("RETURN"), cancellable = true)
-    private void cc_capCubeLevel(long startPos, long endPos, int startLevel, CallbackInfoReturnable<Integer> cir) {
-        if (cc_isCubic && CloPos.isCube(endPos) && cir.getReturnValueI() > cc_maxCubeLevel()) {
-            cir.setReturnValue(levelCount - 1);
-        }
-    }
+    @Shadow protected abstract int getLevelFromSource(long to);
 
-    @ModifyConstant(method = "computeLevelFromNeighbor", constant = @Constant(intValue = 1))
-    private int cc_dontIncrementLevelOnCubeChunkEdge(
-            int constant, @Local(ordinal = 0, argsOnly = true) long startPos, @Local(ordinal = 1, argsOnly = true) long endPos
-    ) {
-        if (cc_isCubic && CloPos.isCube(startPos) && CloPos.isChunk(endPos)) {
-            return 0;
+    /**
+     * Vanilla's rule (a neighbour's level plus one; the source's own level from {@link #getLevelFromSource}), and in a cubic level:
+     * <ul>
+     * <li>a cube passes its level on to its columns unchanged;</li>
+     * <li>a cube never gets a level above {@link #cc_maxCubeLevel}. In the loading tracker cubes load only up to the cube load limit, below
+     * the column one, and a cube's level there is read back from its holder: a cube given a level between the two had none (so read back as
+     * unloaded) yet held up the columns beneath it, and when its ticket went the tracker saw no change, so those columns never unloaded.</li>
+     * </ul>
+     * One method in place of vanilla's rather than injections into it: the trackers call it for every neighbour of every position they
+     * update, and two injected handlers there (each making its callback object) took a sixth of the server thread after a teleport.
+     *
+     * @author Xyberg-001
+     * @reason see above
+     */
+    @Overwrite
+    protected int computeLevelFromNeighbor(long from, long to, int fromLevel) {
+        if (!cc_isCubic) {
+            return from == ChunkPos.INVALID_CHUNK_POS ? this.getLevelFromSource(to) : fromLevel + 1;
         }
-        return constant;
+        int level = from == CloPos.INVALID_CLO_POS ? this.getLevelFromSource(to) : fromLevel + (CloPos.isCube(from) && CloPos.isChunk(to) ? 0 : 1);
+        return CloPos.isCube(to) && level > cc_maxCubeLevel() ? levelCount - 1 : level;
     }
 
     @Inject(method = "checkNeighborsAfterUpdate", at = @At("HEAD"), cancellable = true)
     private void cc_onCheckNeighborsAfterUpdate(long pos, int level, boolean isDecreasing, CallbackInfo ci) {
         if (cc_isCubic) {
             ci.cancel();
-            CloPos.forEachNeighbor(pos, n -> this.checkNeighbor(pos, n, level, isDecreasing));
+            // as vanilla's: a position at the last level passes nothing on when levels only fall
+            if (!isDecreasing || level < this.levelCount - 2) {
+                CloPos.forEachNeighbor(pos, n -> this.checkNeighbor(pos, n, level, isDecreasing));
+            }
         }
     }
 
@@ -163,34 +168,34 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
             }
             cir.setReturnValue(out);
         } else {
+            // computeLevelFromNeighbor for each neighbour, with the cap applied once (the smallest capped level is the capped smallest)
             int out = level;
-
             int x = CloPos.extractX(pos);
             int y = CloPos.extractY(pos);
             int z = CloPos.extractZ(pos);
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
+            if (excludedSourcePos != CloPos.INVALID_CLO_POS) {
+                out = Math.min(out, this.getLevelFromSource(pos));
+            }
+            for (int dx = -1; dx <= 1 && out > 0; dx++) {
+                for (int dz = -1; dz <= 1 && out > 0; dz++) {
                     for (int dy = -1; dy <= 1; dy++) {
-                        long neighbor = CloPos.cubeAsLong(x + dx, y + dy, z + dz);
-                        if (neighbor == pos) {
-                            neighbor = CloPos.INVALID_CLO_POS;
+                        if (dx == 0 && dy == 0 && dz == 0) {
+                            continue;
                         }
-
+                        long neighbor = CloPos.cubeAsLong(x + dx, y + dy, z + dz);
                         if (neighbor != excludedSourcePos) {
-                            int k1 = this.computeLevelFromNeighbor(neighbor, pos, this.getLevel(neighbor));
-                            if (out > k1) {
-                                out = k1;
-                            }
-
-                            if (out == 0) {
-                                cir.setReturnValue(out);
-                                return;
+                            int fromNeighbor = this.getLevel(neighbor) + 1;
+                            if (out > fromNeighbor) {
+                                out = fromNeighbor;
+                                if (out == 0) {
+                                    break;
+                                }
                             }
                         }
                     }
                 }
             }
-            cir.setReturnValue(out);
+            cir.setReturnValue(out > cc_maxCubeLevel() ? levelCount - 1 : out);
         }
     }
 
