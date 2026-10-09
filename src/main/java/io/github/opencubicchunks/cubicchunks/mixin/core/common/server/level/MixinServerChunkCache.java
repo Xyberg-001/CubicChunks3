@@ -152,6 +152,21 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
     @TransformFromMethod("getChunk(IILnet/minecraft/world/level/chunk/status/ChunkStatus;Z)Lnet/minecraft/world/level/chunk/ChunkAccess;")
     @Override public native @Nullable CubeAccess cc_getCube(int chunkX, @AddUnusedParam int chunkY, int chunkZ, ChunkStatus requiredStatus, boolean load);
 
+    /**
+     * A full cube asked for without loading is the one loaded now, or none: vanilla's getChunk waits for a chunk its tickets are still
+     * generating, which for cubes (entity fluid checks after a teleport, say) held the server thread while far terrain generated, until the
+     * watchdog stopped the server.
+     */
+    @Dynamic @Inject(method = "cc_getCube", cancellable = true, at = @At("HEAD"))
+    private void cc_getFullCubeWithoutWaiting(
+            int pChunkX, int pChunkY, int pChunkZ, ChunkStatus pRequiredStatus, boolean pLoad, CallbackInfoReturnable<CubeAccess> cir
+    ) {
+        if (!pLoad && pRequiredStatus == ChunkStatus.FULL) {
+            LevelCube cached = this.cc_getCubeNow(pChunkX, pChunkY, pChunkZ); // the last cubes' cache, on the server thread
+            cir.setReturnValue(cached != null ? cached : this.cc_getFullCubeNow(CubePos.of(pChunkX, pChunkY, pChunkZ)));
+        }
+    }
+
     // mixin-into-dasm to replace call to getChunk with getCube
     @Dynamic @Inject(method = "cc_getCube", cancellable = true, at = @At(value = "INVOKE", target = "Ljava/util/concurrent/CompletableFuture;supplyAsync(Ljava/util/function/Supplier;Ljava/util/concurrent/Executor;)"
             + "Ljava/util/concurrent/CompletableFuture;"))

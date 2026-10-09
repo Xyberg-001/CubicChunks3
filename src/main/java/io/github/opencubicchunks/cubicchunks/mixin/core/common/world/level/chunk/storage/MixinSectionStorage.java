@@ -60,6 +60,9 @@ public abstract class MixinSectionStorage<R, P> implements CubicSectionStorage {
     @Unique private @Nullable CubeStorage cc_cubes;
     @Unique private final LongSet cc_loadedCubes = new LongOpenHashSet();
     @Unique private final LongLinkedOpenHashSet cc_dirtyCubes = new LongLinkedOpenHashSet();
+    /** Cubes being read by {@link #cc_prefetchCube} (server thread only). */
+    @Unique private final it.unimi.dsi.fastutil.longs.Long2ObjectMap<CompletableFuture<Void>> cc_prefetchingCubes =
+            new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
 
     @Shadow protected abstract boolean outsideStoredRange(long sectionPos);
 
@@ -81,6 +84,28 @@ public abstract class MixinSectionStorage<R, P> implements CubicSectionStorage {
 
     @Override public Optional<?> cc_getOrLoad(long sectionPos) {
         return this.getOrLoad(sectionPos);
+    }
+
+    @Override public CompletableFuture<?> cc_prefetchCube(CubePos cubePos, java.util.concurrent.Executor serverThread) {
+        long key = cubePos.asLong();
+        if (this.cc_cubes == null || this.cc_loadedCubes.contains(key)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        CompletableFuture<Void> reading = this.cc_prefetchingCubes.get(key);
+        if (reading == null) {
+            reading = this.cc_cubes.read(cubePos).handleAsync((tag, error) -> {
+                this.cc_prefetchingCubes.remove(key);
+                if (error != null) {
+                    CC_LOGGER.error("Failed to read the sections of cube {}; starting them empty", cubePos, error);
+                }
+                if (this.cc_loadedCubes.add(key)) { // unless something asked for them meanwhile, and they were read then
+                    this.cc_unpackCube(cubePos, error == null ? tag.orElse(null) : null);
+                }
+                return null;
+            }, serverThread);
+            this.cc_prefetchingCubes.put(key, reading);
+        }
+        return reading;
     }
 
     @Unique private static CubePos cc_cubeOf(long sectionPos) {
@@ -110,13 +135,18 @@ public abstract class MixinSectionStorage<R, P> implements CubicSectionStorage {
         if (!this.cc_loadedCubes.add(cubePos.asLong())) {
             return;
         }
-        CompoundTag sections = null;
+        CompoundTag tag = null;
         try {
-            Optional<CompoundTag> tag = this.cc_cubes.read(cubePos).join();
-            sections = tag.map(t -> t.getCompoundOrEmpty("Sections")).orElse(null);
+            tag = this.cc_cubes.read(cubePos).join().orElse(null);
         } catch (RuntimeException e) {
             CC_LOGGER.error("Failed to read the sections of cube {}; starting them empty", cubePos, e);
         }
+        this.cc_unpackCube(cubePos, tag);
+    }
+
+    /** Takes in a cube's sections as read (none: all empty). */
+    @Unique private void cc_unpackCube(CubePos cubePos, @Nullable CompoundTag tag) {
+        CompoundTag sections = tag == null ? null : tag.getCompoundOrEmpty("Sections");
         RegistryOps<Tag> ops = this.registryAccess.createSerializationContext(NbtOps.INSTANCE);
         for (int i = 0; i < CubicConstants.SECTION_COUNT; i++) {
             long key = CubeSections.sectionPosOf(cubePos, i).asLong();

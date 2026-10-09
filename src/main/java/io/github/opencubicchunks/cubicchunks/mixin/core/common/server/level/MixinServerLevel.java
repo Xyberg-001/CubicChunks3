@@ -138,13 +138,29 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
         if (cube == null) {
             return;
         }
-        net.minecraft.world.level.chunk.LevelChunkSection[] sections = cube.getSections();
-        net.minecraft.world.entity.ai.village.poi.PoiManager poi = ((ServerLevel) (Object) this).getPoiManager();
-        for (int i = 0; i < sections.length; i++) {
-            if (!sections[i].hasOnlyAir() && sections[i].maybeHas(net.minecraft.world.entity.ai.village.poi.PoiTypes::hasPoi)) {
-                poi.checkConsistencyWithBlocks(io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSections.sectionPosOf(cubePos, i), sections[i]);
-            }
+        boolean mayHavePoi = false;
+        for (net.minecraft.world.level.chunk.LevelChunkSection section : cube.getSections()) {
+            mayHavePoi |= !section.hasOnlyAir() && section.maybeHas(net.minecraft.world.entity.ai.village.poi.PoiTypes::hasPoi);
         }
+        if (!mayHavePoi) {
+            return;
+        }
+        // the cube's points of interest are read from disk off the server thread first (a cube's read waited behind the cubes loading,
+        // seconds at a time); then checked here, if the cube is still loaded
+        ServerLevel level = (ServerLevel) (Object) this;
+        net.minecraft.world.entity.ai.village.poi.PoiManager poi = level.getPoiManager();
+        ((io.github.opencubicchunks.cubicchunks.world.level.CubicSectionStorage) poi).cc_prefetchCube(cubePos, level.getServer()).thenRun(() -> {
+            io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess loaded = this.cc_getCubeSource().cc_getFullCubeNow(cubePos);
+            if (loaded == null || !this.cc_poiCheckedCubes.contains(key)) {
+                return;
+            }
+            net.minecraft.world.level.chunk.LevelChunkSection[] sections = loaded.getSections();
+            for (int i = 0; i < sections.length; i++) {
+                if (!sections[i].hasOnlyAir() && sections[i].maybeHas(net.minecraft.world.entity.ai.village.poi.PoiTypes::hasPoi)) {
+                    poi.checkConsistencyWithBlocks(io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSections.sectionPosOf(cubePos, i), sections[i]);
+                }
+            }
+        });
     }
 
     @Override public ServerCubeCache cc_getCubeSource() {

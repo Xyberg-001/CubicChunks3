@@ -203,17 +203,27 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
 
     /**
      * The cube a block read looks in: on the server only one that is loaded already, unless loading is allowed here (see CubeLoads); null
-     * when there is none (the block reads as void air, its fluid as none).
+     * when there is none (the block reads as void air, its fluid as none). Block reads are many: the loaded cube is looked up first, on the
+     * server thread through the chunk source's cache of the last cubes (as vanilla's getChunkNow), and whether loading is allowed only asked
+     * when there is none.
      */
     @org.spongepowered.asm.mixin.Unique
     private @Nullable LevelCube cc_readableCubeAt(BlockPos blockPos) {
         Level level = (Level) (Object) this;
-        if (level.isClientSide() || io.github.opencubicchunks.cubicchunks.world.level.CubeLoads.allowed()) {
+        if (level.isClientSide()) {
             return this.cc_getCubeAt(blockPos);
         }
-        CubeAccess cube = ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource())
-                .cc_getFullCubeNow(io.github.opencubicchunks.cc_core.api.CubePos.from(blockPos));
-        return cube instanceof LevelCube levelCube ? levelCube : null;
+        int cubeX = Coords.blockToCube(blockPos.getX()), cubeY = Coords.blockToCube(blockPos.getY()), cubeZ = Coords.blockToCube(blockPos.getZ());
+        LevelCube cube = ((io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource) level.getChunkSource()).cc_getCubeNow(cubeX, cubeY, cubeZ);
+        if (cube == null) { // not on the server thread, or not loaded
+            CubeAccess full = ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource())
+                    .cc_getFullCubeNow(io.github.opencubicchunks.cc_core.api.CubePos.of(cubeX, cubeY, cubeZ));
+            cube = full instanceof LevelCube levelCube ? levelCube : null;
+        }
+        if (cube == null && io.github.opencubicchunks.cubicchunks.world.level.CubeLoads.allowed()) {
+            return this.cc_getCubeAt(blockPos);
+        }
+        return cube;
     }
 
     @WrapOperation(method = "getBlockState", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/LevelChunk;getBlockState(Lnet/minecraft/core/BlockPos;)"

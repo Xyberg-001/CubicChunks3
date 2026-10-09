@@ -20,4 +20,10 @@ public interface CubicSectionStorage {
 
     /** The section's data, loading its cube's from disk if need be (vanilla's getOrLoad). */
     Optional<?> cc_getOrLoad(long sectionPos);
+
+    /**
+     * Reads a cube's sections from disk off the server thread and takes them in on it (the executor), as vanilla's prefetch does for a chunk
+     * as it loads; done at once if they are in already. The server thread then finds them without waiting for the disk.
+     */
+    java.util.concurrent.CompletableFuture<?> cc_prefetchCube(CubePos cubePos, java.util.concurrent.Executor serverThread);
 }
