@@ -9,9 +9,11 @@ import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddMethodToS
 import io.github.notstirred.dasm.api.annotations.redirect.redirects.AddTransformToSets;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
+import io.github.opencubicchunks.cubicchunks.api.CubicApi;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkInCubicContextSet;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStatusTasks;
 import net.minecraft.server.level.GenerationChunkHolder;
+import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.StaticCache2D;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -45,13 +47,23 @@ public class CCChunkStatusTasks {
         return CompletableFuture.completedFuture(chunk);
     }
 
-    // We skip chunk generation steps in cubic contexts by delegating to passThrough
+    // We skip chunk generation steps in cubic contexts by delegating to passThrough, except for structures when the level's cube generator
+    // places them (CubeGenerator.usesStructures): columns then hold the structure starts and references, as vanilla's chunks do
     @AddMethodToSets(containers = ChunkInCubicContextSet.ChunkStatusTasks_to_CCChunkStatusTasks_redirects.class, method = "generateStructureStarts(Lnet/minecraft/world/level/chunk/status/WorldGenContext;"
             + "Lnet/minecraft/world/level/chunk/status/ChunkStep;Lnet/minecraft/util/StaticCache2D;Lnet/minecraft/world/level/chunk/ChunkAccess;)"
             + "Ljava/util/concurrent/CompletableFuture;")
     public static CompletableFuture<ChunkAccess> generateStructureStarts(
             WorldGenContext worldGenContext, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk
     ) {
+        // vanilla's own, written out (MixinChunkStatusTasks sends vanilla's here in a cubic world)
+        ServerLevel level = worldGenContext.level();
+        if (CubicApi.usesStructures(level)) {
+            if (level.getServer().getWorldGenSettings().options().generateStructures()) {
+                worldGenContext.generator().createStructures(level.registryAccess(), level.getChunkSource().getGeneratorState(), level.structureManager(),
+                        chunk, worldGenContext.structureManager(), level.dimension());
+            }
+            level.onStructureStartsAvailable(chunk);
+        }
         return passThrough(worldGenContext, step, cache, chunk);
     }
 
@@ -60,6 +72,9 @@ public class CCChunkStatusTasks {
     public static CompletableFuture<ChunkAccess> loadStructureStarts(
             WorldGenContext worldGenContext, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk
     ) {
+        if (CubicApi.usesStructures(worldGenContext.level())) {
+            worldGenContext.level().onStructureStartsAvailable(chunk);
+        }
         return passThrough(worldGenContext, step, cache, chunk);
     }
 
@@ -69,6 +84,11 @@ public class CCChunkStatusTasks {
     public static CompletableFuture<ChunkAccess> generateStructureReferences(
             WorldGenContext worldGenContext, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk
     ) {
+        ServerLevel level = worldGenContext.level();
+        if (CubicApi.usesStructures(level)) {
+            WorldGenRegion region = new WorldGenRegion(level, cache, step, chunk);
+            worldGenContext.generator().createReferences(region, level.structureManager().forWorldGenRegion(region), chunk);
+        }
         return passThrough(worldGenContext, step, cache, chunk);
     }
 

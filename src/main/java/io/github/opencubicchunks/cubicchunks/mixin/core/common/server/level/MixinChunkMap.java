@@ -62,6 +62,8 @@ import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubeStep;
 import io.github.opencubicchunks.cubicchunks.world.level.entity.CloStatusUpdateListener;
 import io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight;
+import io.github.opencubicchunks.cubicchunks.world.storage.ColumnSerializer;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import io.github.opencubicchunks.cubicchunks.world.storage.CubeSerializer;
 import io.github.opencubicchunks.cubicchunks.world.storage.CubeStorage;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
@@ -406,8 +408,11 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
                 cc_unlight(cube);
                 cc_cubesUnloaded.incrementAndGet();
             } else if ((Object) clo instanceof LevelChunk column) {
+                cc_save(clo); // its structures, if it keeps any (see ColumnSerializer)
                 column.setLoaded(false);
                 level.unload(column);
+            } else {
+                cc_save(clo); // a column still generating: its structures, if it has them already
             }
             nextChunkSaveTime.remove(cloPos);
             // only once saved: an unfinished cube's save looks here to learn whether a finished one is on disk (else it reads it back)
@@ -461,6 +466,39 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
                     CubicChunks.LOGGER.error("Failed to load cube {}; generating it again", cubePos, throwable);
                     return cc_createEmptyChunk(cloPos);
                 }, mainThreadExecutor);
+    }
+
+    /**
+     * A cubic level's column: its structures from the column storage (see ColumnSerializer), or a new one; its blocks are its cubes'. Read
+     * on the cube storage's thread, built on the server thread.
+     */
+    @Inject(method = "scheduleChunkLoad(Lnet/minecraft/world/level/ChunkPos;)Ljava/util/concurrent/CompletableFuture;", at = @At("HEAD"),
+            cancellable = true)
+    private void cc_scheduleColumnLoad(ChunkPos pos, CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
+        if (cc_cubeStorage == null) {
+            return;
+        }
+        CloPos cloPos = CloPos.chunk(pos);
+        cir.setReturnValue(cc_cubeStorage.readColumn(pos.x(), pos.z()).thenApplyAsync(tag -> {
+            ChunkAccess column = (ChunkAccess) cc_createEmptyChunk(cloPos);
+            if (tag.isPresent() && column instanceof net.minecraft.world.level.chunk.ProtoChunk proto) {
+                ColumnSerializer.read(level, tag.get(), proto);
+            }
+            return column;
+        }, mainThreadExecutor).exceptionallyAsync(throwable -> {
+            CubicChunks.LOGGER.error("Failed to load column {}; making it again", pos, throwable);
+            return (ChunkAccess) cc_createEmptyChunk(cloPos);
+        }, mainThreadExecutor));
+    }
+
+    /** Saves a cubic level's column if its cube generator places structures and it has its structure starts (see ColumnSerializer). */
+    private boolean cc_saveColumn(ChunkAccess column) {
+        if (!io.github.opencubicchunks.cubicchunks.api.CubicApi.usesStructures(level) || !ColumnSerializer.worthSaving(column) || !column.tryMarkSaved()) {
+            return false;
+        }
+        ChunkPos pos = column.getPos();
+        cc_cubeStorage.writeColumn(pos.x(), pos.z(), () -> ColumnSerializer.write(level, column));
+        return true;
     }
 
     @Dynamic @Redirect(method = "cc_scheduleChunkLoad", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/ai/village/poi/PoiManager;prefetch(Lio/github/opencubicchunks/cc_core/world/level/CloPos;)"
@@ -585,8 +623,11 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     @AddMethodToSets(containers = ChunkToCloSet.ChunkMap_redirects.class, method = "save(Lnet/minecraft/world/level/chunk/ChunkAccess;)Z")
     private boolean cc_save(CloAccess cloAccess) {
         CloPos cloPos = cloAccess.cc_getCloPos();
-        if (!cloPos.isCube() || cc_cubeStorage == null) {
-            return false; // TODO (P2) save/load: columns
+        if (cc_cubeStorage == null) {
+            return false;
+        }
+        if (!cloPos.isCube()) {
+            return cc_saveColumn(cloAccess instanceof ImposterProtoClo imposter ? (ChunkAccess) imposter.cc_getWrappedClo() : (ChunkAccess) cloAccess);
         }
         CubeAccess cube = cloAccess instanceof ImposterProtoClo imposter ? (CubeAccess) imposter.cc_getWrappedClo() : (CubeAccess) cloAccess;
         boolean changed = cube.tryMarkSaved();

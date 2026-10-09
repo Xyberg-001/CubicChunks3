@@ -31,6 +31,16 @@ public interface CubeGenerator {
     }
 
     /**
+     * Whether the level's vanilla structures are placed by this generator: the level's columns then work out structure starts and references
+     * as vanilla's chunks do (with the level's chunk generator, so it decides which structures go where), which also lets the game find them
+     * (/locate, maps, the mobs that spawn in them). The generator places their blocks itself in {@link #decorate}, reading the starts through
+     * {@link CubicApi#column}. Without it the columns hold no structures.
+     */
+    default boolean usesStructures() {
+        return false;
+    }
+
+    /**
      * What a column looks like from afar, for mods that draw distant terrain without the cubes (Distant Horizons): null if this generator
      * cannot tell without generating cubes (those mods then show only cubes that exist). Called on their threads; must be thread safe.
      */

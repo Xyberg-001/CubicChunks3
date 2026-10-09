@@ -10,7 +10,9 @@ import io.github.opencubicchunks.cubicchunks.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 /**
  * What other mods use of Cubic Chunks: whether a level is cubic and the heights its world holds, and how to generate the terrain of a cubic
@@ -70,6 +72,22 @@ public final class CubicApi {
             }
         }
         return NONE;
+    }
+
+    /** Whether the level's cube generator places vanilla structures (see {@link CubeGenerator#usesStructures}). */
+    public static boolean usesStructures(ServerLevel level) {
+        CubeGenerator generator = cubeGenerator(level);
+        return generator != null && generator.usesStructures();
+    }
+
+    /**
+     * A column of a cubic level if it has reached the status, or null; from any thread, never waiting or loading. A cubic level's columns
+     * hold what vanilla keeps per chunk for structures (their starts and references, see {@link CubeGenerator#usesStructures}); its cubes
+     * hold the blocks. While a cube is being decorated, the columns within ten chunks of it have their structure starts, and those within two
+     * their references, as vanilla's chunks have theirs while a chunk is decorated.
+     */
+    public static @Nullable ChunkAccess column(ServerLevel level, int chunkX, int chunkZ, ChunkStatus status) {
+        return ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource()).cc_getColumnNow(chunkX, chunkZ, status);
     }
 
     /** Forgets a level's cube generator as the level unloads (Cubic Chunks calls this). */

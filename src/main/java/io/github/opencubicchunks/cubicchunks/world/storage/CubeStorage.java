@@ -82,6 +82,35 @@ public class CubeStorage implements AutoCloseable {
         }, io);
     }
 
+    /** A column's saved data (see ColumnSerializer), or empty. */
+    public CompletableFuture<Optional<CompoundTag>> readColumn(int x, int z) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Optional<ByteBuffer> buf = save().load(new EntryLocation2D(x, z), true);
+                if (buf.isEmpty()) {
+                    return Optional.empty();
+                }
+                return Optional.of(NbtIo.readCompressed(new ByteArrayInputStream(buf.get().array()), NbtAccounter.unlimitedHeap()));
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to read column " + x + ", " + z, e);
+            }
+        }, io);
+    }
+
+    /** Writes a column's data (built by the supplier, on this storage's thread) over any saved before. */
+    public CompletableFuture<Void> writeColumn(int x, int z, Supplier<CompoundTag> data) {
+        return CompletableFuture.runAsync(() -> {
+            CompoundTag tag = data.get();
+            try {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                NbtIo.writeCompressed(tag, out);
+                save().save2d(new EntryLocation2D(x, z), ByteBuffer.wrap(out.toByteArray()));
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to write column " + x + ", " + z, e);
+            }
+        }, io);
+    }
+
     /** Waits for every read and write asked so far. */
     public void synchronize() {
         if (!closed) {
