@@ -29,6 +29,7 @@ import io.github.opencubicchunks.cubicchunks.mixin.core.common.world.level.chunk
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCloSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.GlobalSet;
+import io.github.opencubicchunks.cubicchunks.server.level.CubeBlockChanges;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicThreadedLightEngine;
 import io.github.opencubicchunks.cubicchunks.server.level.CubeHolder;
 import io.github.opencubicchunks.cubicchunks.server.level.GenerationCloHolder;
@@ -317,6 +318,7 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
             return;
         }
         ci.cancel();
+        CubeBlockChanges.blockChanged(this.level, pos);
         int x = Coords.blockToCube(pos.getX());
         int y = Coords.blockToCube(pos.getY());
         int z = Coords.blockToCube(pos.getZ());

@@ -266,7 +266,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             return;
         }
         world.getServer().runCommand("tp @a 0 60 0 90 10");
-        for (int wait = 0; wait < 4; wait++) {
+        for (int wait = 0; wait < 2; wait++) {
             context.waitTicks(600);
             StringBuilder columns = new StringBuilder();
             for (int[] at : new int[][] { { 0, 0 }, { 300, 0 }, { 600, 0 }, { 0, 600 } }) {
@@ -278,6 +278,13 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             LOGGER.info("[cc-gametest] dh: after {} ticks{}", (wait + 1) * 600, columns);
         }
         context.takeScreenshot("cc-dh-horizon");
+        // changes reach it: a gold layer over the origin's surface and a gold tower on it, sent within two flushes of changed columns
+        world.getServer().runCommand("fill -8 -4 -8 8 -4 8 minecraft:gold_block");
+        world.getServer().runCommand("fill 0 -3 0 0 40 0 minecraft:gold_block");
+        context.waitTicks(260);
+        String origin = context.computeOnClient(mc -> io.github.opencubicchunks.cubicchunks.compat.dh.DhCubes.describeColumn(0, 0));
+        String corner = context.computeOnClient(mc -> io.github.opencubicchunks.cubicchunks.compat.dh.DhCubes.describeColumn(8, 8));
+        LOGGER.info("[cc-gametest] dh: after the gold layer at Y -4 and tower to Y 40: 0, 0:{}; 8, 8:{}", origin, corner);
         world.getServer().runCommand("tp @a 0 200 0 90 25");
         context.waitTicks(200);
         context.takeScreenshot("cc-dh-from-above");

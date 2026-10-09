@@ -85,7 +85,7 @@ public final class CubicDhWorldGenerator implements IDhApiWorldGenerator {
     }
 
     /** The chunk's columns, or null if Distant Horizons only wants what exists and no cube over its window does. */
-    private @Nullable DhApiChunk buildChunk(int chunkX, int chunkZ, boolean existingOnly, Map<Long, LevelChunkSection[]> cache) {
+    @Nullable DhApiChunk buildChunk(int chunkX, int chunkZ, boolean existingOnly, Map<Long, LevelChunkSection[]> cache) {
         int minY = DhWindow.minY();
         int topY = minY + DhWindow.height(); // exclusive
         int cubeX = Coords.sectionToCube(chunkX);
