@@ -166,6 +166,9 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
             ((MarkableAsCubic) distanceManager).cc_setCubic();
             ((CubeYRange) distanceManager).cc_setCubeYRange(Coords.blockToCube(CubicHeight.minY(level)), Coords.blockToCube(CubicHeight.maxY(level)));
             cc_cubeStorage = new CubeStorage(levelStorageAccess.getDimensionPath(level.dimension()), level.dimension().identifier().toString());
+            // points of interest cube by cube, in a cube store of their own (see MixinSectionStorage)
+            ((io.github.opencubicchunks.cubicchunks.world.level.CubicSectionStorage) poiManager).cc_setCubeStorage(new CubeStorage(
+                    levelStorageAccess.getDimensionPath(level.dimension()).resolve("poi"), level.dimension().identifier() + " poi"));
         }
     }
 
@@ -629,6 +632,8 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
         if (!cloPos.isCube()) {
             return cc_saveColumn(cloAccess instanceof ImposterProtoClo imposter ? (ChunkAccess) imposter.cc_getWrappedClo() : (ChunkAccess) cloAccess);
         }
+        // as vanilla flushes a chunk's points of interest as it saves the chunk
+        ((io.github.opencubicchunks.cubicchunks.world.level.CubicSectionStorage) poiManager).cc_flushCube(cloPos.cubePos());
         CubeAccess cube = cloAccess instanceof ImposterProtoClo imposter ? (CubeAccess) imposter.cc_getWrappedClo() : (CubeAccess) cloAccess;
         boolean changed = cube.tryMarkSaved();
         if (!changed && !cube.cc_inhabitedTimeUnsaved()) {

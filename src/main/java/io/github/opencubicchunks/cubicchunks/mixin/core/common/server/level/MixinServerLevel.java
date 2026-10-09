@@ -110,6 +110,36 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
 
     @Override public void cc_onCubeFullStatusChange(CubePos cubePos, FullChunkStatus status) {
         ((CubicEntitySections.Manager) this.entityManager).cc_updateCubeStatus(cubePos, Visibility.fromFullChunkStatus(status));
+        this.cc_checkPointsOfInterest(cubePos, status);
+    }
+
+    @org.spongepowered.asm.mixin.Unique private final it.unimi.dsi.fastutil.longs.LongSet cc_poiCheckedCubes = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+
+    /**
+     * As vanilla does for a chunk as it loads (SerializableChunkData.read): the points of interest of a cube that becomes full are made sure
+     * of from its blocks. A generated cube's blocks were written without them, and a world from before they were kept for cubes has none.
+     */
+    @org.spongepowered.asm.mixin.Unique
+    private void cc_checkPointsOfInterest(CubePos cubePos, FullChunkStatus status) {
+        long key = cubePos.asLong();
+        if (!status.isOrAfter(FullChunkStatus.FULL)) {
+            this.cc_poiCheckedCubes.remove(key);
+            return;
+        }
+        if (!this.cc_poiCheckedCubes.add(key)) {
+            return;
+        }
+        io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess cube = this.cc_getCubeSource().cc_getFullCubeNow(cubePos);
+        if (cube == null) {
+            return;
+        }
+        net.minecraft.world.level.chunk.LevelChunkSection[] sections = cube.getSections();
+        net.minecraft.world.entity.ai.village.poi.PoiManager poi = ((ServerLevel) (Object) this).getPoiManager();
+        for (int i = 0; i < sections.length; i++) {
+            if (!sections[i].hasOnlyAir() && sections[i].maybeHas(net.minecraft.world.entity.ai.village.poi.PoiTypes::hasPoi)) {
+                poi.checkConsistencyWithBlocks(io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSections.sectionPosOf(cubePos, i), sections[i]);
+            }
+        }
     }
 
     @Override public ServerCubeCache cc_getCubeSource() {
