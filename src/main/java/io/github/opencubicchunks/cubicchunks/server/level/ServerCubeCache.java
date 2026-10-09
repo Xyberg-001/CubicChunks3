@@ -34,6 +34,9 @@ public interface ServerCubeCache extends CubeSource {
     /** The full cube there if it is loaded, else null; never loads it, and may be asked from any thread (it reads the visible holders). */
     @Nullable CubeAccess cc_getFullCubeNow(CubePos pos);
 
+    /** The cube there if it is in memory and has reached the status (full or still generating), else null; like {@link #cc_getFullCubeNow}. */
+    @Nullable CubeAccess cc_getCubeNow(CubePos pos, net.minecraft.world.level.chunk.status.ChunkStatus status);
+
     /** A column if it has reached the status, from any thread, never waiting (see CubicApi.column). */
     @Nullable net.minecraft.world.level.chunk.ChunkAccess cc_getColumnNow(int chunkX, int chunkZ, net.minecraft.world.level.chunk.status.ChunkStatus status);
 

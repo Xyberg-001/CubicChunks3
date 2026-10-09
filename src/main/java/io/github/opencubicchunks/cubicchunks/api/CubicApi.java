@@ -155,12 +155,12 @@ public final class CubicApi {
     }
 
     /**
-     * A cube's blocks: the loaded cube's, else the saved one's if its terrain was generated (it may not be decorated yet); empty when there is
-     * neither. From any thread; reading a saved cube waits for the disk, so not on the server thread.
+     * A cube's blocks once its terrain was generated (it may not be decorated yet): the cube in memory, full or still generating, else the
+     * saved one; empty when there is neither. From any thread; reading a saved cube waits for the disk, so not on the server thread.
      */
     public static java.util.Optional<CubeBlocks> readCube(ServerLevel level, int cubeX, int cubeY, int cubeZ) {
         var pos = io.github.opencubicchunks.cc_core.api.CubePos.of(cubeX, cubeY, cubeZ);
-        var loaded = ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource()).cc_getFullCubeNow(pos);
+        var loaded = ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource()).cc_getCubeNow(pos, ChunkStatus.TERRAIN);
         net.minecraft.world.level.chunk.LevelChunkSection[] sections = null;
         if (loaded != null) {
             sections = loaded.getSections();

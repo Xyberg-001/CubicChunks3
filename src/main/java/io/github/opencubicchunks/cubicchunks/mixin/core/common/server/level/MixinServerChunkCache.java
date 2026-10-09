@@ -303,8 +303,12 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
     }
 
     @Override public @Nullable CubeAccess cc_getFullCubeNow(CubePos pos) {
+        return this.cc_getCubeNow(pos, ChunkStatus.FULL);
+    }
+
+    @Override public @Nullable CubeAccess cc_getCubeNow(CubePos pos, ChunkStatus status) {
         ChunkHolder holder = this.getVisibleChunkIfPresent(CloPos.cubeAsLong(pos.getX(), pos.getY(), pos.getZ()));
-        return holder == null ? null : ((GenerationCloHolder) holder).cc_getCubeIfPresentUnchecked(ChunkStatus.FULL);
+        return holder == null ? null : ((GenerationCloHolder) holder).cc_getCubeIfPresentUnchecked(status);
     }
 
     @Override public @Nullable net.minecraft.world.level.chunk.ChunkAccess cc_getColumnNow(int chunkX, int chunkZ, ChunkStatus status) {
