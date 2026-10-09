@@ -132,5 +132,21 @@ public abstract class MixinDistanceManager implements MarkableAsCubic, CubeYRang
         return CloPos.section(sectionPos).toLong();
     }
 
+    @Shadow private int simulationDistance;
+
+    /**
+     * The players' simulation ticket level in a cubic level. Vanilla's (entity ticking minus the simulation distance) reaches that many
+     * positions, and a cubic level's tracker counts cubes, in three dimensions: a simulation distance of 10 ticked every cube within 10
+     * cubes, 320 blocks each way and up and down (some 9,000 cubes, ticked every tick: the play test's server lagged seconds at a time).
+     * Counted in cubes the distance covers the same blocks across as vanilla's chunks (10 chunks: 5 cubes) and as far up and down.
+     */
+    @org.spongepowered.asm.mixin.injection.Inject(method = "getPlayerTicketLevel", at = @At("HEAD"), cancellable = true)
+    private void cc_cubeSimulationLevel(org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Integer> cir) {
+        if (cc_isCubic) {
+            cir.setReturnValue(Math.max(0, net.minecraft.server.level.ChunkLevel.byStatus(net.minecraft.server.level.FullChunkStatus.ENTITY_TICKING)
+                    - io.github.opencubicchunks.cc_core.utils.Coords.sectionToCubeCeil(this.simulationDistance)));
+        }
+    }
+
     // TODO how does hasPlayersNearby work?
 }

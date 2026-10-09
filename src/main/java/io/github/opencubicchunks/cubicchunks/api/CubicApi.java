@@ -145,6 +145,54 @@ public final class CubicApi {
         return true;
     }
 
+    /** A cube's blocks as {@link #readCube} found them. */
+    public interface CubeBlocks {
+        /** The block at a world position inside the cube. */
+        net.minecraft.world.level.block.state.BlockState getBlock(int x, int y, int z);
+
+        /** Whether the cube holds nothing but air. */
+        boolean isEmpty();
+    }
+
+    /**
+     * A cube's blocks: the loaded cube's, else the saved one's if its terrain was generated (it may not be decorated yet); empty when there is
+     * neither. From any thread; reading a saved cube waits for the disk, so not on the server thread.
+     */
+    public static java.util.Optional<CubeBlocks> readCube(ServerLevel level, int cubeX, int cubeY, int cubeZ) {
+        var pos = io.github.opencubicchunks.cc_core.api.CubePos.of(cubeX, cubeY, cubeZ);
+        var loaded = ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource()).cc_getFullCubeNow(pos);
+        net.minecraft.world.level.chunk.LevelChunkSection[] sections = null;
+        if (loaded != null) {
+            sections = loaded.getSections();
+        } else {
+            var saved = ((io.github.opencubicchunks.cubicchunks.server.level.CubicChunkMap) level.getChunkSource().chunkMap).cc_readSavedCube(pos).join();
+            if (saved.isPresent()) {
+                var parsed = io.github.opencubicchunks.cubicchunks.world.storage.CubeSerializer.parse(level.registryAccess(), saved.get());
+                if (parsed != null && parsed.status().isOrAfter(ChunkStatus.TERRAIN)) {
+                    sections = parsed.sections();
+                }
+            }
+        }
+        if (sections == null) {
+            return java.util.Optional.empty();
+        }
+        var s = sections;
+        return java.util.Optional.of(new CubeBlocks() {
+            @Override public net.minecraft.world.level.block.state.BlockState getBlock(int x, int y, int z) {
+                return s[io.github.opencubicchunks.cc_core.utils.Coords.blockToIndex(x, y, z)].getBlockState(x & 15, y & 15, z & 15);
+            }
+
+            @Override public boolean isEmpty() {
+                for (var section : s) {
+                    if (!section.hasOnlyAir()) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        });
+    }
+
     /** Forgets a level's cube generator as the level unloads (Cubic Chunks calls this). */
     public static void forgetLevel(ServerLevel level) {
         GENERATORS.remove(level);
