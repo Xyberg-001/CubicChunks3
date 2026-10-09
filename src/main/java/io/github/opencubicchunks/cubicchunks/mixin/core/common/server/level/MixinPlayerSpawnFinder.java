@@ -24,7 +24,9 @@ public class MixinPlayerSpawnFinder {
         if (!((CanBeCubic) level).cc_isCubic()) {
             return;
         }
-        cir.setReturnValue(SpawnPlaceFinder.getTopBlockBisect(level, new BlockPos(posX, 0, posZ), false,
-                pos -> level.getBlockState(pos).is(BlockTags.VALID_SPAWN), pos -> level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()));
+        // the search reads cubes that are not loaded yet, which it loads (see CubeLoads)
+        cir.setReturnValue(io.github.opencubicchunks.cubicchunks.world.level.CubeLoads.allowing(() -> SpawnPlaceFinder.getTopBlockBisect(level,
+                new BlockPos(posX, 0, posZ), false,
+                pos -> level.getBlockState(pos).is(BlockTags.VALID_SPAWN), pos -> level.getBlockState(pos).getCollisionShape(level, pos).isEmpty())));
     }
 }

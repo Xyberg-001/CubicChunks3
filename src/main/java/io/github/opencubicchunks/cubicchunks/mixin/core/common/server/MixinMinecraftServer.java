@@ -55,8 +55,10 @@ public abstract class MixinMinecraftServer {
         if (!((CanBeCubic) level).cc_isCubic()) {
             return original.call(generator, heightAccessor);
         }
-        BlockPos top = SpawnPlaceFinder.getTopBlockBisect(level, spawnChunk.getWorldPosition().offset(8, 0, 8), false,
-                pos -> level.getBlockState(pos).is(BlockTags.VALID_SPAWN), pos -> level.getBlockState(pos).getCollisionShape(level, pos).isEmpty());
+        // the search reads cubes that are not loaded yet, which it loads (see CubeLoads)
+        BlockPos top = io.github.opencubicchunks.cubicchunks.world.level.CubeLoads.allowing(() -> SpawnPlaceFinder.getTopBlockBisect(level,
+                spawnChunk.getWorldPosition().offset(8, 0, 8), false,
+                pos -> level.getBlockState(pos).is(BlockTags.VALID_SPAWN), pos -> level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()));
         return top != null ? top.getY() : level.getSeaLevel() + 1; // vanilla's default
     }
 

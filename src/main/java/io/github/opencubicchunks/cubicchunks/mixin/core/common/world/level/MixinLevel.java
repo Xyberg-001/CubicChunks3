@@ -186,13 +186,34 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
 
     // getBlockState
     // Replaces LevelChunk with a LevelCube to call getBlockState
-    @Inject(method = "getBlockState", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;getChunk(II)Lnet/minecraft/world/level/chunk/LevelChunk;"))
+    @Inject(method = "getBlockState", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;getChunk(II)Lnet/minecraft/world/level/chunk/LevelChunk;"),
+            cancellable = true)
     private void cc_replaceLevelChunkInGetBlockState(
             BlockPos blockPos, CallbackInfoReturnable<BlockState> cir, @Share("levelCube") LocalRef<LevelCube> levelCubeLocalRef
     ) {
         if (cc_isCubic) {
-            levelCubeLocalRef.set(this.cc_getCubeAt(blockPos));
+            LevelCube cube = this.cc_readableCubeAt(blockPos);
+            if (cube == null) {
+                cir.setReturnValue(net.minecraft.world.level.block.Blocks.VOID_AIR.defaultBlockState());
+                return;
+            }
+            levelCubeLocalRef.set(cube);
         }
+    }
+
+    /**
+     * The cube a block read looks in: on the server only one that is loaded already, unless loading is allowed here (see CubeLoads); null
+     * when there is none (the block reads as void air, its fluid as none).
+     */
+    @org.spongepowered.asm.mixin.Unique
+    private @Nullable LevelCube cc_readableCubeAt(BlockPos blockPos) {
+        Level level = (Level) (Object) this;
+        if (level.isClientSide() || io.github.opencubicchunks.cubicchunks.world.level.CubeLoads.allowed()) {
+            return this.cc_getCubeAt(blockPos);
+        }
+        CubeAccess cube = ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource())
+                .cc_getFullCubeNow(io.github.opencubicchunks.cc_core.api.CubePos.from(blockPos));
+        return cube instanceof LevelCube levelCube ? levelCube : null;
     }
 
     @WrapOperation(method = "getBlockState", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/LevelChunk;getBlockState(Lnet/minecraft/core/BlockPos;)"
@@ -222,7 +243,8 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
             + "Lnet/minecraft/world/level/material/FluidState;"))
     private FluidState cc_replaceGetChunkAtInGetFluidState(LevelChunk levelChunk, BlockPos blockPos, Operation<FluidState> original) {
         if (cc_isCubic) {
-            return this.cc_getCubeAt(blockPos).getFluidState(blockPos);
+            LevelCube cube = this.cc_readableCubeAt(blockPos);
+            return cube == null ? net.minecraft.world.level.material.Fluids.EMPTY.defaultFluidState() : cube.getFluidState(blockPos);
         }
         return original.call(levelChunk, blockPos);
     }
