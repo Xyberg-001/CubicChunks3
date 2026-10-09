@@ -148,5 +148,30 @@ public abstract class MixinDistanceManager implements MarkableAsCubic, CubeYRang
         }
     }
 
+    @Shadow @Final private LongSet ticketsToRelease;
+    @Shadow protected abstract net.minecraft.server.level.ChunkHolder getChunk(long node);
+    @Shadow @Final private net.minecraft.server.level.ThrottlingChunkTaskDispatcher ticketDispatcher;
+
+    /**
+     * A player's view reaches cubes beyond a cubic level's heights, and gives them loading tickets; the loading tracker keeps such cubes
+     * past {@link io.github.opencubicchunks.cubicchunks.server.level.CubeYRange#CUBES_BEYOND} from loading at all (no holder). Vanilla
+     * expects every player-ticketed position to have a holder as it releases the ticket's throttle (and throws otherwise): those positions
+     * are released here first, as the throttle's other path does for a ticket that no longer applies.
+     */
+    @org.spongepowered.asm.mixin.injection.Inject(method = "runAllUpdates", at = @At(value = "INVOKE", target = "Lit/unimi/dsi/fastutil/longs/LongSet;isEmpty()Z"))
+    private void cc_releaseTicketsWithoutHolders(ChunkMap scheduler, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Boolean> cir) {
+        if (!cc_isCubic || this.ticketsToRelease.isEmpty()) {
+            return;
+        }
+        it.unimi.dsi.fastutil.longs.LongIterator positions = this.ticketsToRelease.iterator();
+        while (positions.hasNext()) {
+            long pos = positions.nextLong();
+            if (this.getChunk(pos) == null) {
+                positions.remove();
+                this.ticketDispatcher.release(pos, () -> { }, false);
+            }
+        }
+    }
+
     // TODO how does hasPlayersNearby work?
 }

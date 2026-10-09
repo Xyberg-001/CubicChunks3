@@ -81,12 +81,13 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
             + "Lnet/minecraft/world/level/ChunkPos;)Lnet/minecraft/server/level/ChunkGenerationTask;")
     @Public private static ChunkGenerationTask cc_createCubeGenerationTask(GeneratingChunkMap chunkMap, ChunkStatus targetStatus, CubePos pos) {
         int cubeRadius = CubePyramid.CC_GENERATION_PYRAMID_CUBES.getStepTo(targetStatus).getAccumulatedRadiusOf(ChunkStatus.EMPTY);
-        int cubeDiameter = cubeRadius * 2 + 1;
-        int chunkDiameter = cubeDiameter * CubicConstants.DIAMETER_IN_SECTIONS;
+        // the columns: the cube's own and those around it as far as the generation layers reach (cc_chunkRadiusForLayer, widest for EMPTY)
+        int chunkRadius = cc_chunkRadius(targetStatus, ChunkStatus.EMPTY, true);
+        int chunkDiameter = CubicConstants.DIAMETER_IN_SECTIONS + 2 * chunkRadius;
         // We directly use the StaticCache2D constructor, as the `create` factory method only allows for odd dimensions, and `chunkDiameter` is even
         // (for cube sizes greater than 16)
-        StaticCache2D<GenerationChunkHolder> staticcache2d = new StaticCache2D<>(Coords.cubeToSection(pos.getX() - cubeRadius, 0),
-                Coords.cubeToSection(pos.getZ() - cubeRadius, 0), chunkDiameter, chunkDiameter,
+        StaticCache2D<GenerationChunkHolder> staticcache2d = new StaticCache2D<>(Coords.cubeToSection(pos.getX(), 0) - chunkRadius,
+                Coords.cubeToSection(pos.getZ(), 0) - chunkRadius, chunkDiameter, chunkDiameter,
                 (x, z) -> chunkMap.acquireGeneration(ChunkPos.pack(x, z)));
         var chunkGenerationTask = new ChunkGenerationTask(chunkMap, targetStatus, null, staticcache2d);
         ((MixinChunkGenerationTask) (Object) chunkGenerationTask).cc_cubePos = pos;
@@ -199,17 +200,17 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
                     if (status.isAfter(this.targetStatus)) {
                         break;
                     }
-                    int radius = this.cc_getCubeRadiusForLayer(status, false);
-                    for (int cubeX = this.cc_cubePos.getX() - radius; cubeX <= this.cc_cubePos.getX() + radius; cubeX++) {
-                        for (int cubeZ = this.cc_cubePos.getZ() - radius; cubeZ <= this.cc_cubePos.getZ() + radius; cubeZ++) {
-                            for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
-                                for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
-                                    ChunkStatus current = this.cache.get(Coords.cubeToSection(cubeX, dx), Coords.cubeToSection(cubeZ, dz)).getPersistedStatus();
-                                    if (current == null || current.isBefore(status)) {
-                                        cir.setReturnValue(false);
-                                        return;
-                                    }
-                                }
+                    int radius = this.cc_chunkRadiusForLayer(status, false);
+                    int minX = Coords.cubeToSection(this.cc_cubePos.getX(), 0) - radius;
+                    int maxX = Coords.cubeToSection(this.cc_cubePos.getX(), CubicConstants.DIAMETER_IN_SECTIONS - 1) + radius;
+                    int minZ = Coords.cubeToSection(this.cc_cubePos.getZ(), 0) - radius;
+                    int maxZ = Coords.cubeToSection(this.cc_cubePos.getZ(), CubicConstants.DIAMETER_IN_SECTIONS - 1) + radius;
+                    for (int chunkX = minX; chunkX <= maxX; chunkX++) {
+                        for (int chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
+                            ChunkStatus current = this.cache.get(chunkX, chunkZ).getPersistedStatus();
+                            if (current == null || current.isBefore(status)) {
+                                cir.setReturnValue(false);
+                                return;
                             }
                         }
                     }
@@ -252,18 +253,16 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
                 }
             }
             if (chunkStatus != null) {
-                int cubeRadius = this.cc_getCubeRadiusForLayer(chunkStatus, needsGeneration);
-                for (int cubeX = this.cc_cubePos.getX() - cubeRadius; cubeX <= this.cc_cubePos.getX() + cubeRadius; cubeX++) {
-                    for (int cubeZ = this.cc_cubePos.getZ() - cubeRadius; cubeZ <= this.cc_cubePos.getZ() + cubeRadius; cubeZ++) {
-                        for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
-                            for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
-                                int chunkX = Coords.cubeToSection(cubeX, dx);
-                                int chunkZ = Coords.cubeToSection(cubeZ, dz);
-                                GenerationChunkHolder generationchunkholder = this.cache.get(chunkX, chunkZ);
-                                if (this.markedForCancellation || !this.scheduleChunkInLayer(chunkStatus, needsGeneration, generationchunkholder)) {
-                                    return;
-                                }
-                            }
+                int radius = this.cc_chunkRadiusForLayer(chunkStatus, needsGeneration);
+                int minX = Coords.cubeToSection(this.cc_cubePos.getX(), 0) - radius;
+                int maxX = Coords.cubeToSection(this.cc_cubePos.getX(), CubicConstants.DIAMETER_IN_SECTIONS - 1) + radius;
+                int minZ = Coords.cubeToSection(this.cc_cubePos.getZ(), 0) - radius;
+                int maxZ = Coords.cubeToSection(this.cc_cubePos.getZ(), CubicConstants.DIAMETER_IN_SECTIONS - 1) + radius;
+                for (int chunkX = minX; chunkX <= maxX; chunkX++) {
+                    for (int chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
+                        GenerationChunkHolder generationchunkholder = this.cache.get(chunkX, chunkZ);
+                        if (this.markedForCancellation || !this.scheduleChunkInLayer(chunkStatus, needsGeneration, generationchunkholder)) {
+                            return;
                         }
                     }
                 }
@@ -281,6 +280,39 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
 
     @TransformFromMethod(useRedirectSets = ChunkToCubeSet.class, owner = @Ref(ChunkGenerationTask.class), value = "getRadiusForLayer(Lnet/minecraft/world/level/chunk/status/ChunkStatus;Z)I")
     private native int cc_getCubeRadiusForLayer(ChunkStatus status, boolean needsGeneration);
+
+    /** How many chunks past the cube's columns a layer of the given status reaches (see {@link #cc_chunkRadius}). */
+    @org.spongepowered.asm.mixin.Unique
+    private int cc_chunkRadiusForLayer(ChunkStatus status, boolean needsGeneration) {
+        return cc_chunkRadius(this.targetStatus, status, needsGeneration);
+    }
+
+    /**
+     * How many chunks past a cube's columns its generation needs columns at a status. A cube needs its own columns at its status (a cube is
+     * never ahead of the columns it stands in), so the cubes the task takes to a status T, cubeRadius(T) cubes around, need the columns under
+     * them at T; and a column taken to T needs the columns around it as vanilla's chunk pyramid has it (structure starts 8 chunks around,
+     * which cubes do not need, see CubeStep.Builder.addRequirement). So the columns reach, for each later status T, the cubes' radius for T
+     * in chunks plus vanilla's radius from T down to this status. Column holders are there that far: a column's level is at most that of the
+     * cubes over it, so it reaches as far as a chunk of that level does in vanilla.
+     */
+    @org.spongepowered.asm.mixin.Unique
+    private static int cc_chunkRadius(ChunkStatus targetStatus, ChunkStatus status, boolean needsGeneration) {
+        net.minecraft.world.level.chunk.status.ChunkPyramid chunkPyramid = needsGeneration
+                ? net.minecraft.world.level.chunk.status.ChunkPyramid.GENERATION_PYRAMID : net.minecraft.world.level.chunk.status.ChunkPyramid.LOADING_PYRAMID;
+        CubePyramid cubePyramid = needsGeneration ? CubePyramid.CC_GENERATION_PYRAMID_CUBES : CubePyramid.CC_LOADING_PYRAMID_CUBES;
+        int radius = 0;
+        for (ChunkStatus later : ChunkStatus.getStatusList()) {
+            if (later.isBefore(status)) {
+                continue;
+            }
+            if (later.isAfter(targetStatus)) {
+                break;
+            }
+            int cubes = cubePyramid.getStepTo(targetStatus).getAccumulatedRadiusOf(later);
+            radius = Math.max(radius, cubes * CubicConstants.DIAMETER_IN_SECTIONS + chunkPyramid.getStepTo(later).getAccumulatedRadiusOf(status));
+        }
+        return radius;
+    }
 
     @Shadow protected abstract boolean scheduleChunkInLayer(ChunkStatus status, boolean needsGeneration, GenerationChunkHolder chunk);
 

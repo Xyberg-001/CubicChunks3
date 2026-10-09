@@ -71,6 +71,13 @@ public record CubeStep(
 
         // TODO could be mixin + DASM
         public CubeStep.Builder addRequirement(ChunkStatus requiredStatus, int radius) {
+            if (requiredStatus == ChunkStatus.STRUCTURE_STARTS && !requiredStatus.isOrAfter(this.status)) {
+                // Structures start and are referenced in the columns (CCChunkStatusTasks); a cube's structure steps pass through. Vanilla's
+                // 8 chunks of structure starts around every later step made every cube wait for the cubes 4 away, up and down too: cube
+                // holders 7 cubes past every full cube, and generation tasks of 15 x 15 x 15 cubes. The columns keep their 8 chunks (the
+                // cube generation task schedules them by vanilla's chunk pyramid, see MixinChunkGenerationTask).
+                return this;
+            }
             if (requiredStatus.isOrAfter(this.status)) {
                 throw new IllegalArgumentException("Status " + requiredStatus + " can not be required by " + this.status);
             } else {
