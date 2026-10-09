@@ -35,7 +35,9 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
     private static final int THUNDER_TICKS = 1200;
 
     @Override public void runTest(ClientGameTestContext context) {
-        try (TestSingleplayerContext world = context.worldBuilder().adjustSettings(s -> ((CubicWorldCreation) s).cc_setCubic(true)).create()) {
+        // CC_GT_MAIN=vanilla makes the main world a normal one (to compare another mod's behaviour without cubes)
+        boolean mainCubic = !"vanilla".equals(System.getenv("CC_GT_MAIN"));
+        try (TestSingleplayerContext world = context.worldBuilder().adjustSettings(s -> ((CubicWorldCreation) s).cc_setCubic(mainCubic)).create()) {
             boolean cubic = context.computeOnClient(mc -> ((CanBeCubic) mc.level).cc_isCubic());
             LOGGER.info("[cc-gametest] client level cubic: {}, world settings {}", cubic,
                     world.getServer().computeOnServer(s -> CubicWorldSettings.server()));
@@ -63,9 +65,12 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("viewdistance")) viewDistance(context, world);
             if (stage("shaders")) shaders(context, world);
             if (stage("voxy")) voxy(context, world);
+            if (stage("dh")) distantHorizons(context, world);
+            LOGGER.info("[cc-gametest] main world stages done");
         }
         if (stage("vanillaworld")) vanillaWorld(context);
         if (stage("worldheight")) worldHeight(context);
+        LOGGER.info("[cc-gametest] all stages done");
     }
 
     /**
@@ -248,6 +253,34 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         context.takeScreenshot("cc-voxy-far-y1000");
         String sodium = context.computeOnClient(mc -> sodiumStats());
         LOGGER.info("[cc-gametest] voxy: looked back from 600 blocks{}", sodium);
+    }
+
+    /**
+     * With Distant Horizons installed: after it has had time to build its data around the old surface, what it holds for a column the player
+     * stood on and for columns 300 and 600 blocks away, which no cube was made for (from the world's terrain, see CubicDhWorldGenerator),
+     * with the placeholder surface they should show; then the view to the horizon.
+     */
+    private static void distantHorizons(ClientGameTestContext context, TestSingleplayerContext world) {
+        if (!net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("distanthorizons")) {
+            LOGGER.info("[cc-gametest] dh: not installed, skipped");
+            return;
+        }
+        world.getServer().runCommand("tp @a 0 60 0 90 10");
+        for (int wait = 0; wait < 4; wait++) {
+            context.waitTicks(600);
+            StringBuilder columns = new StringBuilder();
+            for (int[] at : new int[][] { { 0, 0 }, { 300, 0 }, { 600, 0 }, { 0, 600 } }) {
+                String held = context.computeOnClient(mc -> io.github.opencubicchunks.cubicchunks.compat.dh.DhCubes.describeColumn(at[0], at[1]));
+                columns.append("\n  ").append(at[0]).append(", ").append(at[1]).append(" (placeholder surface ")
+                        .append(io.github.opencubicchunks.cubicchunks.world.level.PlaceholderTerrain.surfaceY(at[0], at[1])).append("):")
+                        .append(held);
+            }
+            LOGGER.info("[cc-gametest] dh: after {} ticks{}", (wait + 1) * 600, columns);
+        }
+        context.takeScreenshot("cc-dh-horizon");
+        world.getServer().runCommand("tp @a 0 200 0 90 25");
+        context.waitTicks(200);
+        context.takeScreenshot("cc-dh-from-above");
     }
 
     /** How many non-empty blocks Voxy holds in its 32-block section at a position (-1: none stored, -2: Voxy not reachable). */

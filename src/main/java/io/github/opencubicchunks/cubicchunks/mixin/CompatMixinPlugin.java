@@ -10,11 +10,12 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
 /**
  * The compatibility mixins for another mod apply only when that mod is installed, as they target its classes: those in mixin/sodium with
- * Sodium, those in mixin/voxy with Voxy.
+ * Sodium, those in mixin/voxy with Voxy, those in mixin/dh with Distant Horizons.
  */
 public class CompatMixinPlugin implements IMixinConfigPlugin {
     private static final boolean SODIUM = FabricLoader.getInstance().isModLoaded("sodium");
     private static final boolean VOXY = FabricLoader.getInstance().isModLoaded("voxy");
+    private static final boolean DISTANT_HORIZONS = FabricLoader.getInstance().isModLoaded("distanthorizons");
 
     @Override public void onLoad(String mixinPackage) {
     }
@@ -26,6 +27,9 @@ public class CompatMixinPlugin implements IMixinConfigPlugin {
     @Override public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (mixinClassName.contains(".mixin.voxy.")) {
             return VOXY;
+        }
+        if (mixinClassName.contains(".mixin.dh.")) {
+            return DISTANT_HORIZONS;
         }
         return mixinClassName.contains(".mixin.sodium.") && SODIUM;
     }

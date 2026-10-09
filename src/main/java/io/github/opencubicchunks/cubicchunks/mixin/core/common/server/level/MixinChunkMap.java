@@ -168,6 +168,10 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     }
 
 
+    @Override public CompletableFuture<Optional<CompoundTag>> cc_readSavedCube(CubePos cubePos) {
+        return cc_cubeStorage == null ? CompletableFuture.completedFuture(Optional.empty()) : cc_cubeStorage.read(cubePos);
+    }
+
     @Override public void cc_markCubeUnsaved(CubePos cubePos) {
         cc_setCloUnsaved(CloPos.cube(cubePos));
     }

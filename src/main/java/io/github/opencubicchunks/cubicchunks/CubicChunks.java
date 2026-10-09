@@ -47,6 +47,7 @@ public class CubicChunks extends CubicChunksBase implements ModInitializer {
         }
 
         CCNetworkHandler.register();
+        io.github.opencubicchunks.cubicchunks.compat.dh.DhCubes.init();
         CommandRegistrationCallback.EVENT.register((dispatcher, registries, environment) -> CubicChunksCommand.register(dispatcher));
     }
 

@@ -14,7 +14,7 @@ import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
 import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
-import io.github.opencubicchunks.cubicchunks.CubicChunks;
+import io.github.opencubicchunks.cubicchunks.world.level.PlaceholderTerrain;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicThreadedLightEngine;
 import io.github.opencubicchunks.cubicchunks.util.StaticCache3D;
@@ -102,21 +102,18 @@ public class CubeStatusTasks {
     public static CompletableFuture<CubeAccess> buildTerrain(
             WorldGenContext worldGenContext, CubeStep step, StaticCache3D<GenerationChunkHolder> cache, CubeAccess cube
     ) {
-        // Temporary basic sinusoidal terrain, so we can generate a simple test world
-        int amplitude = 20;
+        // Temporary terrain, so we can generate a simple test world (see PlaceholderTerrain)
         var blockPos = new BlockPos.MutableBlockPos();
-        var blockState = Blocks.SMOOTH_STONE.defaultBlockState();
+        var blockState = PlaceholderTerrain.block();
         int minY = cube.cc_getCubePos().minCubeY();
-        int maxY = Math.min(cube.cc_getCubePos().maxCubeY(), CubicChunks.SUPERFLAT_HEIGHT + amplitude);
+        int maxY = Math.min(cube.cc_getCubePos().maxCubeY(), PlaceholderTerrain.maxSurfaceY());
         int cubeX = cube.cc_getCubePos().minCubeX();
         int cubeZ = cube.cc_getCubePos().minCubeZ();
-        for (int y = minY; y <= maxY; y++) {
-            for (int x = 0; x < CubicConstants.DIAMETER_IN_BLOCKS; x++) {
-                for (int z = 0; z < CubicConstants.DIAMETER_IN_BLOCKS; z++) {
-                    if (y + Math.round((amplitude * (Math.sin((x + cubeX) / 8.0 + (z + cubeZ) / 21.0) + Math.cos((z + cubeZ) / 13.0)))
-                            / 2.0) <= CubicChunks.SUPERFLAT_HEIGHT) {
-                        cube.setBlockState(blockPos.set(x, y, z), blockState);
-                    }
+        for (int x = 0; x < CubicConstants.DIAMETER_IN_BLOCKS; x++) {
+            for (int z = 0; z < CubicConstants.DIAMETER_IN_BLOCKS; z++) {
+                int top = Math.min(maxY, PlaceholderTerrain.surfaceY(x + cubeX, z + cubeZ));
+                for (int y = minY; y <= top; y++) {
+                    cube.setBlockState(blockPos.set(x, y, z), blockState);
                 }
             }
         }

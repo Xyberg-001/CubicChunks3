@@ -16,7 +16,8 @@
     "cubicchunks.mixins.core.json",
     "cubicchunks.mixins.access.json",
     "cubicchunks.mixins.sodium.json",
-    "cubicchunks.mixins.voxy.json"
+    "cubicchunks.mixins.voxy.json",
+    "cubicchunks.mixins.dh.json"
   ],
   "accessWidener": "cubicchunks.accesswidener",
   "custom": {

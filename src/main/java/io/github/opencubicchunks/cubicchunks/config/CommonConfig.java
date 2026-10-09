@@ -20,6 +20,9 @@ public class CommonConfig extends BaseConfig {
     private static final String KEY_GENERATE_NEW_WORLDS_AS_CC = KEY_GENERAL + ".generateNewWorldsAsCC";
     private static final String KEY_NEW_WORLD_MIN_Y = KEY_GENERAL + ".newWorldMinY";
     private static final String KEY_NEW_WORLD_MAX_Y = KEY_GENERAL + ".newWorldMaxY";
+    private static final String KEY_DISTANT_HORIZONS_MIN_Y = KEY_GENERAL + ".distantHorizonsMinY";
+    /** How tall a world Distant Horizons can hold (its data points keep a height in 12 bits). */
+    public static final int DISTANT_HORIZONS_HEIGHT = 4096;
 
     /** The height limits the game can run with (see {@link #getHeightLimit}). */
     public static final int HEIGHT_LIMIT_NORMAL = 8192;
@@ -63,6 +66,11 @@ public class CommonConfig extends BaseConfig {
                  The lowest and highest Y a new cubic world holds (within heightLimit): the default for the world creation screen, and what a
                  server's new world gets.\
                 """);
+        config.set(KEY_DISTANT_HORIZONS_MIN_Y, -2048);
+        config.setComment(KEY_DISTANT_HORIZONS_MIN_Y, """
+                 With Distant Horizons installed: the lowest Y of the 4096 blocks of a cubic world it shows (it can hold no more than 4096 blocks
+                 of height). The default shows Y -2048 to 2047.\
+                """);
         return config;
     }
 
@@ -91,6 +99,10 @@ public class CommonConfig extends BaseConfig {
 
     public int getNewWorldMaxY() {
         return config.getInt(KEY_NEW_WORLD_MAX_Y);
+    }
+
+    public int getDistantHorizonsMinY() {
+        return config.getInt(KEY_DISTANT_HORIZONS_MIN_Y);
     }
 
     public void setVerticalViewDistance(int verticalViewDistance) {

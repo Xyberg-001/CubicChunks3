@@ -79,7 +79,7 @@ mixinGen {
         it.conformVisibility = true
         it.injectorsDefaultRequire = 1
     }
-    // compatibility with Sodium's renderer and Voxy's; each applied only when that mod is installed (CompatMixinPlugin)
+    // compatibility with Sodium's renderer, Voxy's and Distant Horizons; each applied only when that mod is installed (CompatMixinPlugin)
     config(sourceSets.main, "sodium") {
         it.required = false
         it.conformVisibility = true
@@ -87,6 +87,12 @@ mixinGen {
         it.configurationPlugin = "io.github.opencubicchunks.cubicchunks.mixin.CompatMixinPlugin"
     }
     config(sourceSets.main, "voxy") {
+        it.required = false
+        it.conformVisibility = true
+        it.injectorsDefaultRequire = 1
+        it.configurationPlugin = "io.github.opencubicchunks.cubicchunks.mixin.CompatMixinPlugin"
+    }
+    config(sourceSets.main, "dh") {
         it.required = false
         it.conformVisibility = true
         it.injectorsDefaultRequire = 1
@@ -171,6 +177,11 @@ dependencies {
     // ./gradlew runClient/runClientGameTest -PwithSodium runs the game with Sodium; -PextraMods=<folder> adds the mod jars in a folder
     if (project.hasProperty("withSodium")) {
         localRuntime("maven.modrinth:sodium:${sodium_version}")
+    }
+    // Distant Horizons (LGPL-3.0): compiled against for its API (a cubic world generator) and a few mixins, never bundled; -PwithDh runs it
+    compileOnly("maven.modrinth:distanthorizons:${distanthorizons_version}")
+    if (project.hasProperty("withDh")) {
+        localRuntime("maven.modrinth:distanthorizons:${distanthorizons_version}")
     }
     if (project.hasProperty("extraMods")) {
         localRuntime(fileTree(dir: project.property("extraMods"), include: "*.jar"))

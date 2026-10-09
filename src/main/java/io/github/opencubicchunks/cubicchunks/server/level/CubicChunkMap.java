@@ -1,6 +1,10 @@
 package io.github.opencubicchunks.cubicchunks.server.level;
 
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+
 import io.github.opencubicchunks.cc_core.api.CubePos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ChunkGenerationTask;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ServerPlayer;
@@ -15,4 +19,7 @@ public interface CubicChunkMap {
 
     /** Queues the cube to be saved soon (vanilla's setChunkUnsaved, for cubes). */
     void cc_markCubeUnsaved(CubePos cubePos);
+
+    /** The cube's saved data, or empty if it was never saved (read on the cube storage's thread, after any pending writes). */
+    CompletableFuture<Optional<CompoundTag>> cc_readSavedCube(CubePos cubePos);
 }
