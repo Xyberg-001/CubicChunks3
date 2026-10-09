@@ -1,7 +1,9 @@
 package io.github.opencubicchunks.cubicchunks.api;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.annotation.Nullable;
 
@@ -88,6 +90,59 @@ public final class CubicApi {
      */
     public static @Nullable ChunkAccess column(ServerLevel level, int chunkX, int chunkZ, ChunkStatus status) {
         return ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource()).cc_getColumnNow(chunkX, chunkZ, status);
+    }
+
+    /** Told about the cubes of cubic server levels joining and leaving the level (on the server thread). */
+    public interface CubeListener {
+        /** The cube has become full: its blocks can be read (with Level.getBlockState and the like). */
+        void onCubeLoaded(ServerLevel level, int cubeX, int cubeY, int cubeZ);
+
+        /** The cube is no longer full (it is being unloaded); blocks changed in it since it loaded are still there to read. */
+        default void onCubeUnloaded(ServerLevel level, int cubeX, int cubeY, int cubeZ) {
+        }
+    }
+
+    private static final List<CubeListener> LISTENERS = new CopyOnWriteArrayList<>();
+
+    /** Adds a listener for cubes loading and unloading in cubic server levels (at startup). */
+    public static void addCubeListener(CubeListener listener) {
+        LISTENERS.add(listener);
+    }
+
+    /** Cubic Chunks calls this as a cube becomes full (loaded) or stops being so (unloaded). */
+    public static void fireCube(ServerLevel level, int cubeX, int cubeY, int cubeZ, boolean loaded) {
+        for (CubeListener listener : LISTENERS) {
+            try {
+                if (loaded) {
+                    listener.onCubeLoaded(level, cubeX, cubeY, cubeZ);
+                } else {
+                    listener.onCubeUnloaded(level, cubeX, cubeY, cubeZ);
+                }
+            } catch (RuntimeException e) {
+                CubicChunks.LOGGER.error("Cube listener {} failed", listener, e);
+            }
+        }
+    }
+
+    /** Whether the cube is loaded and full (from any thread, never waiting). */
+    public static boolean isCubeLoaded(ServerLevel level, int cubeX, int cubeY, int cubeZ) {
+        return ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource())
+                .cc_getFullCubeNow(io.github.opencubicchunks.cc_core.api.CubePos.of(cubeX, cubeY, cubeZ)) != null;
+    }
+
+    /** Whether the cube is loaded and holds nothing but air (from any thread, never waiting). */
+    public static boolean isCubeEmpty(ServerLevel level, int cubeX, int cubeY, int cubeZ) {
+        var cube = ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource())
+                .cc_getFullCubeNow(io.github.opencubicchunks.cc_core.api.CubePos.of(cubeX, cubeY, cubeZ));
+        if (cube == null) {
+            return false;
+        }
+        for (var section : cube.getSections()) {
+            if (!section.hasOnlyAir()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Forgets a level's cube generator as the level unloads (Cubic Chunks calls this). */

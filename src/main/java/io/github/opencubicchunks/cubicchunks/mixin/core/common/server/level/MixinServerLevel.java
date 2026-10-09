@@ -110,7 +110,12 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
 
     @Override public void cc_onCubeFullStatusChange(CubePos cubePos, FullChunkStatus status) {
         ((CubicEntitySections.Manager) this.entityManager).cc_updateCubeStatus(cubePos, Visibility.fromFullChunkStatus(status));
+        boolean wasFull = this.cc_poiCheckedCubes.contains(cubePos.asLong());
         this.cc_checkPointsOfInterest(cubePos, status);
+        boolean isFull = this.cc_poiCheckedCubes.contains(cubePos.asLong());
+        if (wasFull != isFull) {
+            io.github.opencubicchunks.cubicchunks.api.CubicApi.fireCube((ServerLevel) (Object) this, cubePos.getX(), cubePos.getY(), cubePos.getZ(), isFull);
+        }
     }
 
     @org.spongepowered.asm.mixin.Unique private final it.unimi.dsi.fastutil.longs.LongSet cc_poiCheckedCubes = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
