@@ -8,9 +8,12 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.Climate;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.ticks.ScheduledTick;
 
 /**
  * A cube being generated, for a {@link io.github.opencubicchunks.cubicchunks.api.CubeGenerator}: writes go straight into the sections'
@@ -110,6 +113,18 @@ final class CubeTerrainImpl implements CubeTerrain {
     @Override public void addEntity(Entity entity) {
         if (this.inside(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ())) {
             this.cube.addEntity(entity);
+        }
+    }
+
+    @Override public void scheduleBlockTick(int x, int y, int z, Block block) {
+        if (this.inside(x, y, z)) {
+            this.cube.getBlockTicks().schedule(new ScheduledTick<>(block, new BlockPos(x, y, z), 0L, 0L));
+        }
+    }
+
+    @Override public void scheduleFluidTick(int x, int y, int z, Fluid fluid) {
+        if (this.inside(x, y, z)) {
+            this.cube.getFluidTicks().schedule(new ScheduledTick<>(fluid, new BlockPos(x, y, z), 0L, 0L));
         }
     }
 
