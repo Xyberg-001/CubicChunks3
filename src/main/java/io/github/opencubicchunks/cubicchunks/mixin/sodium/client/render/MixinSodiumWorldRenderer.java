@@ -5,6 +5,8 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.client.render.CubeRenderReadiness;
 import io.github.opencubicchunks.cubicchunks.client.render.SodiumCubes;
+import io.github.opencubicchunks.cubicchunks.client.render.VoxyCubes;
+import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
@@ -44,10 +46,16 @@ public abstract class MixinSodiumWorldRenderer {
         }
     }
 
-    /** A ready cube's sections (Sodium reads each from the cube, so a cube no longer held is left out). */
+    /**
+     * A ready cube's sections (Sodium reads each from the cube, so a cube no longer held is left out). The cube goes to Voxy too, if installed:
+     * its light is in by now.
+     */
     private void cc_addSections(int cubeX, int cubeY, int cubeZ) {
-        if (SodiumCubes.cubeOfSection(this.level, Coords.cubeToSection(cubeX, 0), Coords.cubeToSection(cubeY, 0), Coords.cubeToSection(cubeZ, 0)) != null) {
+        LevelCube cube = SodiumCubes.cubeOfSection(this.level, Coords.cubeToSection(cubeX, 0), Coords.cubeToSection(cubeY, 0),
+                Coords.cubeToSection(cubeZ, 0));
+        if (cube != null) {
             SodiumCubes.forEachSection(cubeX, cubeY, cubeZ, this.renderSectionManager::onSectionAdded);
+            VoxyCubes.ingest(this.level, cube);
         }
     }
 

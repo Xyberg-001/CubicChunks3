@@ -5,6 +5,7 @@ import javax.annotation.Nullable;
 import io.github.opencubicchunks.cubicchunks.client.color.block.CubicBlockTintCache;
 import io.github.opencubicchunks.cubicchunks.client.render.CubeRenderReadiness;
 import io.github.opencubicchunks.cubicchunks.client.render.SodiumCubes;
+import io.github.opencubicchunks.cubicchunks.client.render.VoxyCubes;
 import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
 import net.minecraft.client.color.block.BlockTintCache;
 import net.minecraft.world.level.ColorResolver;
@@ -64,6 +65,7 @@ public abstract class MixinClientLevel extends MixinLevel implements CubicClient
     }
 
     @Override public void cc_onCubeUnloaded(LevelCube cube) {
+        VoxyCubes.ingest((ClientLevel) (Object) this, cube); // its latest state, light included (the light leaves later, queued)
         cube.clearAllBlockEntities();
         ((CubicEntitySections.Manager) this.entityStorage).cc_updateCubeStatus(cube.cc_getCubePos(), Visibility.TRACKED);
         if (this.cc_renderReadiness != null) {

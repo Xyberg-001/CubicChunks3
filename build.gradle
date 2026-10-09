@@ -79,12 +79,18 @@ mixinGen {
         it.conformVisibility = true
         it.injectorsDefaultRequire = 1
     }
-    // compatibility with Sodium's renderer; applied only when Sodium is installed (SodiumMixinPlugin)
+    // compatibility with Sodium's renderer and Voxy's; each applied only when that mod is installed (CompatMixinPlugin)
     config(sourceSets.main, "sodium") {
         it.required = false
         it.conformVisibility = true
         it.injectorsDefaultRequire = 1
-        it.configurationPlugin = "io.github.opencubicchunks.cubicchunks.mixin.SodiumMixinPlugin"
+        it.configurationPlugin = "io.github.opencubicchunks.cubicchunks.mixin.CompatMixinPlugin"
+    }
+    config(sourceSets.main, "voxy") {
+        it.required = false
+        it.conformVisibility = true
+        it.injectorsDefaultRequire = 1
+        it.configurationPlugin = "io.github.opencubicchunks.cubicchunks.mixin.CompatMixinPlugin"
     }
     config(sourceSets.test, "test") {
         it.required = true

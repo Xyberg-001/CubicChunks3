@@ -15,7 +15,8 @@
     "dasm-fabric.mixins.json",
     "cubicchunks.mixins.core.json",
     "cubicchunks.mixins.access.json",
-    "cubicchunks.mixins.sodium.json"
+    "cubicchunks.mixins.sodium.json",
+    "cubicchunks.mixins.voxy.json"
   ],
   "accessWidener": "cubicchunks.accesswidener",
   "custom": {

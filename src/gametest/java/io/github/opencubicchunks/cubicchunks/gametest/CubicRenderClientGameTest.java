@@ -62,6 +62,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
             if (stage("shaders")) shaders(context, world);
+            if (stage("voxy")) voxy(context, world);
         }
         if (stage("vanillaworld")) vanillaWorld(context);
         if (stage("worldheight")) worldHeight(context);
@@ -181,6 +182,64 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
                 return false;
             }
         });
+    }
+
+    /**
+     * With Voxy installed: how far up and down its section ids reach (round trips through WorldEngine.getWorldSectionId and getY), then the
+     * old surface and the platform at Y 1000 seen from 600 blocks away, beyond the render distance, where only Voxy draws terrain (from the
+     * cubes handed to it as they were rendered and dropped, see VoxyCubes).
+     */
+    private static void voxy(ClientGameTestContext context, TestSingleplayerContext world) {
+        if (!io.github.opencubicchunks.cubicchunks.client.render.VoxyCubes.active()) {
+            LOGGER.info("[cc-gametest] voxy: not installed, skipped");
+            return;
+        }
+        StringBuilder range = new StringBuilder();
+        try {
+            Class<?> engine = Class.forName("me.cortex.voxy.common.world.WorldEngine");
+            var id = engine.getMethod("getWorldSectionId", int.class, int.class, int.class, int.class);
+            var getY = engine.getMethod("getY", long.class);
+            for (int sectionY : new int[] { -1024, -256, -250, -128, -64, 0, 64, 127, 128, 250, 256, 1023 }) {
+                long section = (long) id.invoke(null, 0, 0, sectionY, 0);
+                range.append(' ').append(sectionY).append("->").append(getY.invoke(null, section));
+            }
+        } catch (ReflectiveOperationException e) {
+            range.append(' ').append(e);
+        }
+        LOGGER.info("[cc-gametest] voxy: section Y round trips (32-block LOD0 sections):{}", range);
+        String stored = context.computeOnClient(mc -> {
+            StringBuilder out = new StringBuilder();
+            try {
+                Object engine = Class.forName("me.cortex.voxy.commonImpl.WorldIdentifier").getMethod("ofEngineNullable", net.minecraft.world.level.Level.class)
+                        .invoke(null, mc.level);
+                if (engine == null) {
+                    return " no engine for the level";
+                }
+                var acquire = engine.getClass().getMethod("acquireIfExists", int.class, int.class, int.class, int.class);
+                for (int blockY : new int[] { 40, 300, 1000, -300 }) {
+                    Object section = acquire.invoke(engine, 0, 0, Math.floorDiv(blockY, 32), 0);
+                    out.append(" Y ").append(blockY).append(": ");
+                    if (section == null) {
+                        out.append("none");
+                    } else {
+                        out.append(section.getClass().getMethod("getNonEmptyBlockCount").invoke(section)).append(" blocks");
+                        section.getClass().getMethod("release").invoke(section);
+                    }
+                }
+            } catch (ReflectiveOperationException e) {
+                out.append(' ').append(e);
+            }
+            return out.toString();
+        });
+        LOGGER.info("[cc-gametest] voxy: LOD0 sections stored over the origin:{}", stored);
+        world.getServer().runCommand("tp @a 0 120 600 180 15");
+        context.waitTicks(400);
+        context.takeScreenshot("cc-voxy-far-ground");
+        world.getServer().runCommand("tp @a 0 1040 300 180 5");
+        context.waitTicks(400);
+        context.takeScreenshot("cc-voxy-far-y1000");
+        String sodium = context.computeOnClient(mc -> sodiumStats());
+        LOGGER.info("[cc-gametest] voxy: looked back from 600 blocks{}", sodium);
     }
 
     /** Sodium's own count of the sections it renders, when Sodium is installed (it replaces the sections counted above). */

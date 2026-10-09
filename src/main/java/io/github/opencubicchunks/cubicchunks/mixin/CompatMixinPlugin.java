@@ -8,9 +8,13 @@ import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
-/** The sodium mixins (mixin/sodium) apply only when Sodium is installed: they target its classes. */
-public class SodiumMixinPlugin implements IMixinConfigPlugin {
+/**
+ * The compatibility mixins for another mod apply only when that mod is installed, as they target its classes: those in mixin/sodium with
+ * Sodium, those in mixin/voxy with Voxy.
+ */
+public class CompatMixinPlugin implements IMixinConfigPlugin {
     private static final boolean SODIUM = FabricLoader.getInstance().isModLoaded("sodium");
+    private static final boolean VOXY = FabricLoader.getInstance().isModLoaded("voxy");
 
     @Override public void onLoad(String mixinPackage) {
     }
@@ -20,7 +24,10 @@ public class SodiumMixinPlugin implements IMixinConfigPlugin {
     }
 
     @Override public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return SODIUM;
+        if (mixinClassName.contains(".mixin.voxy.")) {
+            return VOXY;
+        }
+        return mixinClassName.contains(".mixin.sodium.") && SODIUM;
     }
 
     @Override public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
