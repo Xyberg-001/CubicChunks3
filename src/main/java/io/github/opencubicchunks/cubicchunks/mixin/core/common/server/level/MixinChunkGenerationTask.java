@@ -189,17 +189,26 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
                                 return;
                             }
                         }
-                        // Chunk required status is the highest status of all cubes, which occurs when cubeY is equal to this.cc_cubePos.y
-                        int chunkDistanceInCubes = this.cc_cubePos.getChessboardDistance(cubeX, this.cc_cubePos.getY(), cubeZ);
-                        ChunkStatus dependencyRequiredStatus = cubeDependencies.get(chunkDistanceInCubes);
-                        for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
-                            for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
-                                int chunkX = Coords.cubeToSection(cubeX, dx);
-                                int chunkZ = Coords.cubeToSection(cubeZ, dz);
-                                ChunkStatus dependencyCurrentStatus = this.cache.get(chunkX, chunkZ).getPersistedStatus();
-                                if (dependencyCurrentStatus == null || dependencyCurrentStatus.isBefore(dependencyRequiredStatus)) {
-                                    cir.setReturnValue(false);
-                                    return;
+                    }
+                }
+                // The chunks: each status the chunk layers will ask for (cc_scheduleLayer: one status ahead of the cubes, up to the target),
+                // over that layer's radius, must be there already. Checked as the cubes' dependencies instead, a column part-generated in
+                // memory (columns are not saved; structure starts leave many at STRUCTURE_STARTS) passed here and then failed in a loading
+                // layer ("Can't load chunk, but didn't expect to need to generate").
+                for (ChunkStatus status : ChunkStatus.getStatusList()) {
+                    if (status.isAfter(this.targetStatus)) {
+                        break;
+                    }
+                    int radius = this.cc_getCubeRadiusForLayer(status, false);
+                    for (int cubeX = this.cc_cubePos.getX() - radius; cubeX <= this.cc_cubePos.getX() + radius; cubeX++) {
+                        for (int cubeZ = this.cc_cubePos.getZ() - radius; cubeZ <= this.cc_cubePos.getZ() + radius; cubeZ++) {
+                            for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
+                                for (int dz = 0; dz < CubicConstants.DIAMETER_IN_SECTIONS; dz++) {
+                                    ChunkStatus current = this.cache.get(Coords.cubeToSection(cubeX, dx), Coords.cubeToSection(cubeZ, dz)).getPersistedStatus();
+                                    if (current == null || current.isBefore(status)) {
+                                        cir.setReturnValue(false);
+                                        return;
+                                    }
                                 }
                             }
                         }
