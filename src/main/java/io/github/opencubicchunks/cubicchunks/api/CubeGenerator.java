@@ -9,8 +9,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 
 /**
- * Generates the terrain of a cubic level's cubes (registered through {@link CubicApi#registerCubeGenerator}): blocks and biomes, at the
- * step where vanilla fills a chunk from noise. Features (trees, ores, structures) come later and are not part of this.
+ * Generates a cubic level's cubes (registered through {@link CubicApi#registerCubeGenerator}): the terrain (blocks and biomes) at the step
+ * where vanilla fills a chunk from noise, then the decoration (trees, buildings, entities) at the step where vanilla places features.
  */
 @FunctionalInterface
 public interface CubeGenerator {
@@ -19,6 +19,16 @@ public interface CubeGenerator {
      * completes (on any thread), for instance after map data has been downloaded. Must not touch the level's other cubes.
      */
     CompletableFuture<?> generate(CubeTerrain cube);
+
+    /**
+     * Decorates the cube, at the features step: the cubes around it have their terrain by then. Only the cube itself is written to, as in
+     * {@link #generate}, but block entities and entities can be added too. Something that crosses cubes (a tree on a cube's edge) is made
+     * by each cube it touches keeping its own part, so a generator decorating whole areas must give every cube the same answer. Called on
+     * a world generation thread; may finish later, as {@link #generate} may.
+     */
+    default CompletableFuture<?> decorate(CubeTerrain cube) {
+        return CompletableFuture.completedFuture(null);
+    }
 
     /**
      * What a column looks like from afar, for mods that draw distant terrain without the cubes (Distant Horizons): null if this generator

@@ -6,6 +6,7 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 import com.google.common.collect.Lists;
+import com.mojang.logging.LogUtils;
 import io.github.notstirred.dasm.api.annotations.Dasm;
 import io.github.notstirred.dasm.api.annotations.selector.Ref;
 import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
@@ -42,10 +43,12 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.ticks.LevelChunkTicks;
 import net.minecraft.world.ticks.ProtoChunkTicks;
 import net.minecraft.world.ticks.TickContainerAccess;
+import org.slf4j.Logger;
 
 @Dasm(ChunkToCubeSet.class)
 public class ProtoCube extends CubeAccess implements ProtoClo {
     // Fields matching ProtoChunk
+    private static final Logger LOGGER = LogUtils.getLogger(); // addEntity's copy reports entities that fail to save through it
     private volatile @Nullable LevelLightEngine lightEngine;
     private volatile ChunkStatus status;
     private final List<CompoundTag> entities;

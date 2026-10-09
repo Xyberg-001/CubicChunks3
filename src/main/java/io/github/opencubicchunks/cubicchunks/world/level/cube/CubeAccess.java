@@ -238,8 +238,14 @@ public abstract class CubeAccess implements CloAccess {
     @TransformFromMethod(value = "addPackedPostProcess(Lit/unimi/dsi/fastutil/shorts/ShortList;I)V", owner = @Ref(ChunkAccess.class))
     @Override public native void addPackedPostProcess(ShortList offsets, int index);
 
-    @TransformFromMethod(value = "setBlockEntityNbt(Lnet/minecraft/nbt/CompoundTag;)V", owner = @Ref(ChunkAccess.class))
-    @Override public native void setBlockEntityNbt(CompoundTag tag);
+    // as ChunkAccess's (whose copy would call a cube version of BlockEntity.getPosFromTag, which does not exist): kept until the block
+    // entity is first asked for
+    @Override public void setBlockEntityNbt(CompoundTag tag) {
+        BlockPos pos = new BlockPos(tag.getIntOr("x", 0), tag.getIntOr("y", 0), tag.getIntOr("z", 0));
+        if (!this.blockEntities.containsKey(pos)) {
+            this.pendingBlockEntities.put(pos, tag);
+        }
+    }
 
     @TransformFromMethod(value = "getBlockEntityNbt(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/nbt/CompoundTag;", owner = @Ref(ChunkAccess.class))
     @Override public native @Nullable CompoundTag getBlockEntityNbt(BlockPos pos);

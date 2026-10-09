@@ -28,7 +28,8 @@ import net.minecraft.world.level.block.state.BlockState;
  * {@code /cubicchunks forceload add|remove <pos> [<radius>]}: keeps the cubes around a block loaded, the cubic counterpart of vanilla's
  * column-based {@code /forceload}. 26.x has no spawn chunks, so without players this is what holds cubes in memory. The tickets are vanilla
  * FORCED tickets keyed by the cube, so they persist with the level's other tickets. {@code /cubicchunks loaded} reports how many holders are
- * loaded, and {@code /cubicchunks light <pos>} the server's light at a block.
+ * loaded, {@code /cubicchunks light <pos>} the server's light at a block, {@code /cubicchunks column <x> <z>} a column's blocks and
+ * {@code /cubicchunks blockentities <pos> [<radius>]} the block entities of the cubes around a block, by type.
  */
 public final class CubicChunksCommand {
     private static final int MAX_RADIUS = 4;
@@ -44,6 +45,11 @@ public final class CubicChunksCommand {
                 .then(Commands.literal("column").then(Commands.argument("x", IntegerArgumentType.integer())
                         .then(Commands.argument("z", IntegerArgumentType.integer())
                                 .executes(c -> column(c.getSource(), IntegerArgumentType.getInteger(c, "x"), IntegerArgumentType.getInteger(c, "z"))))))
+                .then(Commands.literal("blockentities").then(Commands.argument("pos", BlockPosArgument.blockPos())
+                        .executes(c -> blockEntities(c.getSource(), BlockPosArgument.getBlockPos(c, "pos"), 0))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(0, MAX_RADIUS))
+                                .executes(c -> blockEntities(c.getSource(), BlockPosArgument.getBlockPos(c, "pos"),
+                                        IntegerArgumentType.getInteger(c, "radius"))))))
                 .then(Commands.literal("light").then(Commands.argument("pos", BlockPosArgument.blockPos())
                         .executes(c -> light(c.getSource(), BlockPosArgument.getBlockPos(c, "pos")))))
                 .then(Commands.literal("forceload")
@@ -102,6 +108,43 @@ public final class CubicChunksCommand {
                 + (runs.isEmpty() ? " nothing but air in the loaded cubes" : " " + String.join(", ", runs));
         source.sendSuccess(() -> Component.literal(text), false);
         return runs.size();
+    }
+
+    /** The block entities of the loaded cubes around a block's cube, counted by type (most first). */
+    private static int blockEntities(CommandSourceStack source, BlockPos pos, int radius) throws CommandSyntaxException {
+        ServerLevel level = source.getLevel();
+        if (!((CanBeCubic) level).cc_isCubic()) {
+            throw ERROR_NOT_CUBIC.create();
+        }
+        ServerCubeCache cubes = (ServerCubeCache) level.getChunkSource();
+        CubePos center = CubePos.from(pos);
+        java.util.Map<String, Integer> byType = new java.util.TreeMap<>();
+        int loaded = 0;
+        int total = 0;
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    CubeAccess cube = cubes.cc_getFullCubeNow(CubePos.of(center.getX() + dx, center.getY() + dy, center.getZ() + dz));
+                    if (cube == null) {
+                        continue;
+                    }
+                    loaded++;
+                    for (BlockPos at : cube.getBlockEntitiesPos()) {
+                        var blockEntity = cube.getBlockEntity(at);
+                        String type = blockEntity == null ? "unloaded " + cube.getBlockState(at).getBlock().getName().getString()
+                                : net.minecraft.core.registries.BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(blockEntity.getType()).getPath();
+                        byType.merge(type, 1, Integer::sum);
+                        total++;
+                    }
+                }
+            }
+        }
+        List<String> parts = new ArrayList<>();
+        byType.entrySet().stream().sorted((a, b) -> b.getValue() - a.getValue()).forEach(e -> parts.add(e.getValue() + " " + e.getKey()));
+        String text = total + " block entities in " + loaded + " loaded cubes around cube " + center.getX() + " " + center.getY() + " "
+                + center.getZ() + (parts.isEmpty() ? "" : ": " + String.join(", ", parts));
+        source.sendSuccess(() -> Component.literal(text), false);
+        return total;
     }
 
     /** A run for the column command: air only once something solid is above it (the sky is left out). */

@@ -5,8 +5,10 @@ import io.github.opencubicchunks.cubicchunks.api.CubeTerrain;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.Climate;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 
@@ -95,6 +97,19 @@ final class CubeTerrainImpl implements CubeTerrain {
     @Override public void markForPostProcessing(int x, int y, int z) {
         if (this.inside(x, y, z)) {
             this.cube.markPosForPostProcessing(new BlockPos(x, y, z));
+        }
+    }
+
+    @Override public void setBlockEntity(BlockEntity blockEntity) {
+        BlockPos pos = blockEntity.getBlockPos();
+        if (this.inside(pos.getX(), pos.getY(), pos.getZ())) {
+            this.cube.setBlockEntity(blockEntity);
+        }
+    }
+
+    @Override public void addEntity(Entity entity) {
+        if (this.inside(entity.getBlockX(), entity.getBlockY(), entity.getBlockZ())) {
+            this.cube.addEntity(entity);
         }
     }
 

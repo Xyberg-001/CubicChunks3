@@ -140,7 +140,19 @@ public class CubeStatusTasks {
     public static CompletableFuture<CubeAccess> generateFeatures(
             WorldGenContext worldGenContext, CubeStep step, StaticCache3D<GenerationChunkHolder> cache, CubeAccess cube
     ) {
-        return passThrough(worldGenContext, step, cache, cube);
+        // the level's cube generator decorates (CubicApi); vanilla features are not placed in cubes yet
+        CubeGenerator generator = CubicApi.cubeGenerator(worldGenContext.level());
+        if (generator == null) {
+            return passThrough(worldGenContext, step, cache, cube);
+        }
+        CubeTerrainImpl terrain = new CubeTerrainImpl(worldGenContext.level(), cube);
+        return generator.decorate(terrain).handle((done, error) -> {
+            if (error != null) {
+                CubicChunks.LOGGER.error("Cube generator failed to decorate cube {}", cube.cc_getCubePos(), error);
+            }
+            terrain.finish();
+            return cube;
+        });
     }
 
     @AddMethodToSets(containers = ChunkToCubeSet.ChunkStatusTasks_to_CubeStatusTasks_redirects.class, method = "initializeLight(Lnet/minecraft/world/level/chunk/status/WorldGenContext;Lnet/minecraft/world/level/chunk/status/ChunkStep;"
