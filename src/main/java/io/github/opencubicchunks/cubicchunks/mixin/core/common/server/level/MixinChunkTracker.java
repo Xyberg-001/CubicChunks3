@@ -82,6 +82,21 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
      * floor and cap apply here too: without it a player beyond a level's heights put the cubes there at their ticket level, and the edge
      * cubes' generation then wanted neighbours the floor had left without a holder.
      */
+    /**
+     * A tracker that works its cubes' levels out itself rather than by propagation (see MixinFixedPlayerDistanceChunkTracker) takes the
+     * source change here: true when it did.
+     */
+    protected boolean cc_directUpdate(long node, int level) {
+        return false;
+    }
+
+    @Inject(method = "update", at = @At("HEAD"), cancellable = true)
+    private void cc_onUpdate(long node, int newLevelFrom, boolean onlyDecreased, CallbackInfo ci) {
+        if (this.cc_isCubic && this.cc_directUpdate(node, newLevelFrom)) {
+            ci.cancel();
+        }
+    }
+
     @ModifyVariable(method = "update", at = @At("HEAD"), argsOnly = true)
     private int cc_capSourceLevel(int newLevelFrom, @Local(argsOnly = true) long node) {
         if (!cc_isCubic || !CloPos.isCube(node)) {
@@ -194,17 +209,28 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
             }
             cir.setReturnValue(out);
         } else {
-            // computeLevelFromNeighbor for each neighbour, with the floor and cap applied once (they depend on this cube alone)
+            // computeLevelFromNeighbor for each neighbour, with the floor and cap applied once (they depend on this cube alone).
+            // The search stops at a neighbour that keeps the cube at the level it has, if the cube has no level queued: then no
+            // neighbour holds it lower (one that went lower queued the cube's new level as it did), so that is the answer. The tracker
+            // asks this for every neighbour of a cube whose level rises; without the stop a player's tickets going cost 26 x 26 lookups
+            // a cube, a quarter of a minute of server thread as a player left.
             int out = level;
             int x = CloPos.extractX(pos);
             int y = CloPos.extractY(pos);
             int z = CloPos.extractZ(pos);
+            // only for a cube with no level queued: a queued one may be on its way down, and must hear every neighbour
+            int current = ((io.github.opencubicchunks.cubicchunks.mixin.access.common.DynamicGraphMinFixedPointAccess) this).cc_computedLevels().containsKey(pos)
+                    ? -1 : this.getLevel(pos);
             if (excludedSourcePos != CloPos.INVALID_CLO_POS) {
                 out = Math.min(out, this.getLevelFromSource(pos));
             }
-            for (int dx = -1; dx <= 1 && out > 0; dx++) {
-                for (int dz = -1; dz <= 1 && out > 0; dz++) {
+            search:
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
                     for (int dy = -1; dy <= 1; dy++) {
+                        if (out == 0 || out == current) {
+                            break search;
+                        }
                         if (dx == 0 && dy == 0 && dz == 0) {
                             continue;
                         }
@@ -213,9 +239,6 @@ public abstract class MixinChunkTracker extends DynamicGraphMinFixedPoint implem
                             int fromNeighbor = this.getLevel(neighbor) + 1;
                             if (out > fromNeighbor) {
                                 out = fromNeighbor;
-                                if (out == 0) {
-                                    break;
-                                }
                             }
                         }
                     }

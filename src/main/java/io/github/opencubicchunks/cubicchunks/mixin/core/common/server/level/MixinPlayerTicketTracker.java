@@ -46,19 +46,7 @@ public abstract class MixinPlayerTicketTracker extends MixinFixedPlayerDistanceC
         int old = this.cc_cubeViewDistance;
         if (cubes != old) {
             this.cc_cubeViewDistance = cubes;
-            if (old >= 0) {
-                for (long node : this.chunks.keySet().toLongArray()) {
-                    int level = this.chunks.get(node);
-                    if (!CloPos.isCube(node)) {
-                        continue;
-                    }
-                    if (level > cubes) {
-                        this.checkNode(node);
-                    } else if (cubes > old && level == old) {
-                        this.checkNeighborsAfterUpdate(node, level, true);
-                    }
-                }
-            }
+            this.cc_reachChanged(); // the levels are worked out again over the players' boxes as the tracker next runs
         }
         return cubes;
     }
