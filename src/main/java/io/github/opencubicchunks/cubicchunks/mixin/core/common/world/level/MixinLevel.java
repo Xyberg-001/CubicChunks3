@@ -73,6 +73,18 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
     }
 
     /**
+     * cc_core's build heights (MixinLevelHeightAccessor), which bound SpawnPlaceFinder's search: a cubic level's own, not its dimension
+     * type's (a generator may give that a height that only fits its terrain, and the search then never found the air above the ground).
+     */
+    public int getMinBuildHeight() {
+        return this.cc_minBuildY();
+    }
+
+    public int getMaxBuildHeight() {
+        return this.cc_maxBuildY();
+    }
+
+    /**
      * A cubic world holds blocks between the heights its world was made with (see CubicWorldSettings), whatever its dimension type says (its columns
      * keep the dimension's height for what they still size by it); other worlds as vanilla.
      */
