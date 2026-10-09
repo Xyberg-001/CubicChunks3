@@ -232,6 +232,14 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             return out.toString();
         });
         LOGGER.info("[cc-gametest] voxy: LOD0 sections stored over the origin:{}", stored);
+        // a block change reaches Voxy: 121 gold blocks laid on the platform (all in the 32-block section over 0, 1000, 0)
+        world.getServer().runCommand("tp @a 0 1010 0");
+        context.waitTicks(LOAD_TICKS);
+        int before = voxyBlocksAt(context, 0, 1000, 0);
+        world.getServer().runCommand("fill 0 1001 0 10 1001 10 minecraft:gold_block");
+        context.waitTicks(40);
+        int after = voxyBlocksAt(context, 0, 1000, 0);
+        LOGGER.info("[cc-gametest] voxy: blocks in its section at 0, 1000, 0 before laying 121 gold blocks {}, after {}", before, after);
         world.getServer().runCommand("tp @a 0 120 600 180 15");
         context.waitTicks(400);
         context.takeScreenshot("cc-voxy-far-ground");
@@ -240,6 +248,26 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         context.takeScreenshot("cc-voxy-far-y1000");
         String sodium = context.computeOnClient(mc -> sodiumStats());
         LOGGER.info("[cc-gametest] voxy: looked back from 600 blocks{}", sodium);
+    }
+
+    /** How many non-empty blocks Voxy holds in its 32-block section at a position (-1: none stored, -2: Voxy not reachable). */
+    private static int voxyBlocksAt(ClientGameTestContext context, int x, int y, int z) {
+        return context.computeOnClient(mc -> {
+            try {
+                Object engine = Class.forName("me.cortex.voxy.commonImpl.WorldIdentifier").getMethod("ofEngineNullable", net.minecraft.world.level.Level.class)
+                        .invoke(null, mc.level);
+                Object section = engine == null ? null : engine.getClass().getMethod("acquireIfExists", int.class, int.class, int.class, int.class)
+                        .invoke(engine, 0, Math.floorDiv(x, 32), Math.floorDiv(y, 32), Math.floorDiv(z, 32));
+                if (section == null) {
+                    return -1;
+                }
+                int count = (int) section.getClass().getMethod("getNonEmptyBlockCount").invoke(section);
+                section.getClass().getMethod("release").invoke(section);
+                return count;
+            } catch (ReflectiveOperationException e) {
+                return -2;
+            }
+        });
     }
 
     /** Sodium's own count of the sections it renders, when Sodium is installed (it replaces the sections counted above). */

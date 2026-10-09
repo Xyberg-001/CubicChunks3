@@ -23,6 +23,8 @@ import io.github.opencubicchunks.cubicchunks.client.multiplayer.CubicClientLevel
 import io.github.opencubicchunks.cubicchunks.mixin.core.common.world.level.MixinLevel;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -48,6 +50,14 @@ public abstract class MixinClientLevel extends MixinLevel implements CubicClient
             if (SodiumCubes.SODIUM) {
                 this.cc_renderReadiness = new CubeRenderReadiness();
             }
+        }
+    }
+
+    /** Voxy refreshes its copy of a section when a block in it changes; in a cubic level the section comes from its cube (see VoxyCubes). */
+    @Inject(method = "setBlocksDirty", at = @At("TAIL"))
+    private void cc_voxyBlockChanged(BlockPos pos, BlockState oldState, BlockState newState, CallbackInfo ci) {
+        if (this.cc_isCubic && VoxyCubes.active()) {
+            VoxyCubes.ingestBlockChange((ClientLevel) (Object) this, pos);
         }
     }
 

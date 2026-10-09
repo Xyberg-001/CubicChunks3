@@ -7,10 +7,12 @@ import java.lang.invoke.MethodType;
 import javax.annotation.Nullable;
 
 import io.github.opencubicchunks.cc_core.api.CubePos;
+import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSections;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.LevelCube;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
@@ -20,8 +22,8 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
 
 /**
  * Hands a cubic client's cubes to Voxy, which builds its distant terrain from the chunks a client loads and unloads: a cubic client holds
- * no chunks, so its cubes go in section by section instead, as Sodium starts rendering them (their light is in by then) and as the client
- * drops them (their latest state). Voxy is called through its public static methods, looked up once (it is not on a maven to compile
+ * no chunks, so its cubes go in section by section instead, as Sodium starts rendering them (their light is in by then), as the client
+ * drops them (their latest state) and as their blocks change. Voxy is called through its public static methods, looked up once (it is not on a maven to compile
  * against): {@code WorldIdentifier.of(Level)} and {@code VoxelIngestService.rawIngest(WorldIdentifier, LevelChunkSection, sectionX,
  * sectionY, sectionZ, blockLight, skyLight)}. If they are not there (no Voxy, or a version without them) nothing is handed over.
  * <p>
@@ -101,20 +103,51 @@ public final class VoxyCubes {
             if (world == null) {
                 return;
             }
-            LevelLightEngine light = level.getLightEngine();
             CubePos cubePos = cube.cc_getCubePos();
             LevelChunkSection[] sections = cube.getSections();
             for (int i = 0; i < sections.length; i++) {
-                SectionPos pos = CubeSections.sectionPosOf(cubePos, i);
-                if (pos.y() < MIN_SECTION_Y || pos.y() > MAX_SECTION_Y) {
-                    continue;
-                }
-                DataLayer blockLight = light.getLayerListener(LightLayer.BLOCK).getDataLayerData(pos);
-                DataLayer skyLight = light.getLayerListener(LightLayer.SKY).getDataLayerData(pos);
-                boolean ignored = (boolean) RAW_INGEST.invoke(world, sections[i], pos.x(), pos.y(), pos.z(), blockLight, skyLight);
+                ingest(world, level, sections[i], CubeSections.sectionPosOf(cubePos, i));
             }
         } catch (Throwable e) {
             CubicChunks.LOGGER.error("Voxy did not take cube {}", cube.cc_getCubePos(), e);
         }
+    }
+
+    /**
+     * Hands the section holding a changed block to Voxy (client thread). Voxy does this itself on a block change, reading the section from
+     * the block's chunk, which a cubic client does not hold; this reads it from the cube.
+     */
+    public static void ingestBlockChange(Level level, BlockPos pos) {
+        if (RAW_INGEST == null || WORLD_IDENTIFIER == null) {
+            return;
+        }
+        int sectionX = SectionPos.blockToSectionCoord(pos.getX());
+        int sectionY = SectionPos.blockToSectionCoord(pos.getY());
+        int sectionZ = SectionPos.blockToSectionCoord(pos.getZ());
+        LevelCube cube = SodiumCubes.cubeOfSection(level, sectionX, sectionY, sectionZ);
+        if (cube == null) {
+            return;
+        }
+        try {
+            Object world = WORLD_IDENTIFIER.invoke(level);
+            if (world != null) {
+                LevelChunkSection section = cube.getSections()[Coords.sectionToIndex(Coords.cubeLocalSection(sectionX), Coords.cubeLocalSection(sectionY),
+                        Coords.cubeLocalSection(sectionZ))];
+                ingest(world, level, section, SectionPos.of(sectionX, sectionY, sectionZ));
+            }
+        } catch (Throwable e) {
+            CubicChunks.LOGGER.error("Voxy did not take the change at {}", pos, e);
+        }
+    }
+
+    /** One section, with its light, if Voxy holds its height. */
+    private static void ingest(Object world, Level level, LevelChunkSection section, SectionPos pos) throws Throwable {
+        if (pos.y() < MIN_SECTION_Y || pos.y() > MAX_SECTION_Y) {
+            return;
+        }
+        LevelLightEngine light = level.getLightEngine();
+        DataLayer blockLight = light.getLayerListener(LightLayer.BLOCK).getDataLayerData(pos);
+        DataLayer skyLight = light.getLayerListener(LightLayer.SKY).getDataLayerData(pos);
+        boolean ignored = (boolean) RAW_INGEST.invoke(world, section, pos.x(), pos.y(), pos.z(), blockLight, skyLight);
     }
 }
