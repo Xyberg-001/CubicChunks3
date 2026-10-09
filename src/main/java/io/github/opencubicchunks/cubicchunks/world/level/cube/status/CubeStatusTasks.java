@@ -14,6 +14,9 @@ import io.github.notstirred.dasm.api.annotations.transform.TransformFromMethod;
 import io.github.opencubicchunks.cc_core.api.CubePos;
 import io.github.opencubicchunks.cc_core.api.CubicConstants;
 import io.github.opencubicchunks.cc_core.utils.Coords;
+import io.github.opencubicchunks.cubicchunks.CubicChunks;
+import io.github.opencubicchunks.cubicchunks.api.CubeGenerator;
+import io.github.opencubicchunks.cubicchunks.api.CubicApi;
 import io.github.opencubicchunks.cubicchunks.world.level.PlaceholderTerrain;
 import io.github.opencubicchunks.cubicchunks.mixin.dasmsets.ChunkToCubeSet;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicThreadedLightEngine;
@@ -102,6 +105,18 @@ public class CubeStatusTasks {
     public static CompletableFuture<CubeAccess> buildTerrain(
             WorldGenContext worldGenContext, CubeStep step, StaticCache3D<GenerationChunkHolder> cache, CubeAccess cube
     ) {
+        // a mod's cube generator for the level's kind of chunk generator (CubicApi), finishing when it does
+        CubeGenerator generator = CubicApi.cubeGenerator(worldGenContext.level());
+        if (generator != null) {
+            CubeTerrainImpl terrain = new CubeTerrainImpl(worldGenContext.level(), cube);
+            return generator.generate(terrain).handle((done, error) -> {
+                if (error != null) {
+                    CubicChunks.LOGGER.error("Cube generator failed for cube {}", cube.cc_getCubePos(), error);
+                }
+                terrain.finish();
+                return cube;
+            });
+        }
         // Temporary terrain, so we can generate a simple test world (see PlaceholderTerrain)
         var blockPos = new BlockPos.MutableBlockPos();
         var blockState = PlaceholderTerrain.block();

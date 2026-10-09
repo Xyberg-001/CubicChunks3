@@ -188,6 +188,15 @@ dependencies {
     }
 }
 
+// The public API (package api) on its own, for other mods to compile against (Orbis Terrarum keeps it in its libs/)
+tasks.register("apiJar", Jar) {
+    dependsOn("classes")
+    archiveClassifier = "api"
+    from(sourceSets.main.output) {
+        include("io/github/opencubicchunks/cubicchunks/api/**")
+    }
+}
+
 processResources {
     var props = [mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version, mod_authors: mod_authors,
                  mod_description: mod_description, minecraft_version: minecraft_version, loader_version: loader_version]

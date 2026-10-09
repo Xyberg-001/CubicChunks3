@@ -22,6 +22,8 @@ import com.seibel.distanthorizons.api.interfaces.world.IDhApiLevelWrapper;
 import com.seibel.distanthorizons.api.objects.data.DhApiChunk;
 import com.seibel.distanthorizons.api.objects.data.DhApiTerrainDataPoint;
 import io.github.opencubicchunks.cc_core.api.CubePos;
+import io.github.opencubicchunks.cubicchunks.api.CubeGenerator;
+import io.github.opencubicchunks.cubicchunks.api.CubicApi;
 import io.github.opencubicchunks.cc_core.utils.Coords;
 import io.github.opencubicchunks.cubicchunks.CubicChunks;
 import io.github.opencubicchunks.cubicchunks.server.level.CubicChunkMap;
@@ -42,7 +44,7 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 /**
  * Distant Horizons' world generator for a cubic level: when it wants a chunk's columns it does not have, they are built here from the cubes
  * over its height window (DhWindow), top down: a cube the server has loaded, else one saved, else (unless Distant Horizons only wants what
- * already exists) the terrain the world generates (PlaceholderTerrain until there is a real generator). Columns are runs of the same block,
+ * already exists) the terrain the world generates from afar (its cube generator's surface, see CubicApi; PlaceholderTerrain without one). Columns are runs of the same block,
  * with sky light down to the first block that is not air; cubes and sections of only air are passed over whole.
  */
 public final class CubicDhWorldGenerator implements IDhApiWorldGenerator {
@@ -127,16 +129,23 @@ public final class CubicDhWorldGenerator implements IDhApiWorldGenerator {
             int cubeBottom = Math.max(minY, Coords.cubeToMinBlock(cubeY));
             LevelChunkSection[] sections = column[i];
             if (sections == null) {
-                if (existingOnly) {
+                CubeGenerator.Surface surface = existingOnly ? null : this.surface(blockX, blockZ);
+                if (surface == null) {
                     runs.add(this.air, this.defaultBiome, cubeBottom);
                 } else {
-                    // no cube here: the world's terrain, solid up to its surface
-                    int surface = PlaceholderTerrain.surfaceY(blockX, blockZ);
-                    if (surface + 1 < cubeTop) {
-                        runs.add(this.air, this.defaultBiome, Math.max(cubeBottom, surface + 1));
+                    // no cube here: the world's terrain from afar (fluid, then the surface block, then what is below it)
+                    int fluidTop = surface.water() == null ? surface.surfaceY() : Math.max(surface.surfaceY(), surface.waterTopY());
+                    if (fluidTop + 1 < cubeTop) {
+                        runs.add(this.air, this.defaultBiome, Math.max(cubeBottom, fluidTop + 1));
                     }
-                    if (surface >= cubeBottom) {
-                        runs.add(PlaceholderTerrain.block(), this.defaultBiome, cubeBottom);
+                    if (fluidTop > surface.surfaceY() && surface.surfaceY() + 1 < cubeTop && fluidTop >= cubeBottom) {
+                        runs.add(surface.water(), this.defaultBiome, Math.max(cubeBottom, surface.surfaceY() + 1));
+                    }
+                    if (surface.surfaceY() < cubeTop && surface.surfaceY() >= cubeBottom) {
+                        runs.add(surface.block(), this.defaultBiome, surface.surfaceY());
+                    }
+                    if (surface.surfaceY() > cubeBottom) {
+                        runs.add(surface.fill(), this.defaultBiome, cubeBottom);
                     }
                 }
                 continue;
@@ -157,6 +166,19 @@ public final class CubicDhWorldGenerator implements IDhApiWorldGenerator {
             }
         }
         return runs.finish();
+    }
+
+    /**
+     * The world's terrain from afar where no cube exists: the level's cube generator's (CubicApi), or Cubic Chunks' placeholder terrain
+     * if the level has none; null if its generator cannot tell (only existing cubes are shown then).
+     */
+    private @Nullable CubeGenerator.Surface surface(int x, int z) {
+        CubeGenerator generator = CubicApi.cubeGenerator(this.level);
+        if (generator != null) {
+            return generator.surface(x, z);
+        }
+        BlockState stone = PlaceholderTerrain.block();
+        return new CubeGenerator.Surface(PlaceholderTerrain.surfaceY(x, z), stone, stone, Integer.MIN_VALUE, null);
     }
 
     /** The cube's sections: loaded on the server, else saved, else {@link #NO_CUBE}. */

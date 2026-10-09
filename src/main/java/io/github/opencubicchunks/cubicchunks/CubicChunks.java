@@ -48,6 +48,8 @@ public class CubicChunks extends CubicChunksBase implements ModInitializer {
 
         CCNetworkHandler.register();
         io.github.opencubicchunks.cubicchunks.compat.dh.DhCubes.init();
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents.UNLOAD.register((server, level) ->
+                io.github.opencubicchunks.cubicchunks.api.CubicApi.forgetLevel(level));
         CommandRegistrationCallback.EVENT.register((dispatcher, registries, environment) -> CubicChunksCommand.register(dispatcher));
     }
 

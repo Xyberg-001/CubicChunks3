@@ -348,12 +348,27 @@ public abstract class CubeAccess implements CloAccess {
         throw new UnsupportedOperationException(); // TODO P3
     }
 
+    /** The biome at quart (4-block) coordinates, from the section holding them (clamped into the cube, as vanilla clamps into a chunk). */
     @Override public Holder<Biome> getNoiseBiome(int x, int y, int z) {
-        throw new UnsupportedOperationException(); // TODO P3
+        CubePos pos = this.cc_getCubePos();
+        int min = 0;
+        int max = CubicConstants.DIAMETER_IN_BLOCKS / 4 - 1;
+        int qx = Math.clamp(x - (pos.minCubeX() >> 2), min, max);
+        int qy = Math.clamp(y - (pos.minCubeY() >> 2), min, max);
+        int qz = Math.clamp(z - (pos.minCubeZ() >> 2), min, max);
+        LevelChunkSection section = this.getSection(Coords.sectionToIndex(qx >> 2, qy >> 2, qz >> 2));
+        return section.getNoiseBiome(qx & 3, qy & 3, qz & 3);
     }
 
+    /** Each section's biomes from the resolver, as a chunk fills its sections' (the sampler is the resolver's business in 26.x). */
     @Override public void fillBiomesFromNoise(BiomeResolver resolver, Climate.Sampler sampler) {
-        throw new UnsupportedOperationException(); // TODO P3
+        CubePos pos = this.cc_getCubePos();
+        LevelChunkSection[] sections = this.getSections();
+        for (int i = 0; i < sections.length; i++) {
+            net.minecraft.core.SectionPos sectionPos = CubeSections.sectionPosOf(pos, i);
+            sections[i].fillBiomesFromNoise(resolver, net.minecraft.core.QuartPos.fromSection(sectionPos.x()),
+                    net.minecraft.core.QuartPos.fromSection(sectionPos.y()), net.minecraft.core.QuartPos.fromSection(sectionPos.z()));
+        }
     }
 
     @Override public @Nullable BelowZeroRetrogen getBelowZeroRetrogen() {
