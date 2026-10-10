@@ -65,6 +65,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("border")) border(context, world);
             if (stage("dimensions")) dimensions(context, world);
             if (stage("heightmaps")) heightmaps(context, world);
+            if (stage("maps")) maps(context, world);
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
             if (stage("shaders")) shaders(context, world);
@@ -931,6 +932,46 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             }
         }
         return agree + " of " + total + " agree, " + roofed + " roofed by cubes not held" + firstMiss;
+    }
+
+    /**
+     * A map held in a cubic level draws the ground (vanilla read each pixel from the column's chunk, which holds no blocks there: all of it
+     * came out as bedrock grey). A square of red wool is laid on the ground near the player; the map must show it, and the land around it.
+     */
+    private static void maps(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("tp @a 0 40 0");
+        context.waitTicks(LOAD_TICKS);
+        world.getServer().runOnServer(s -> {
+            var level = s.overworld();
+            for (int x = 8; x < 24; x++) {
+                for (int z = 8; z < 24; z++) {
+                    int top = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, x, z) - 1;
+                    level.setBlockAndUpdate(new BlockPos(x, top, z), net.minecraft.world.level.block.Blocks.WOOL.pick(net.minecraft.world.item.DyeColor.RED).defaultBlockState());
+                }
+            }
+            var player = s.getPlayerList().getPlayers().getFirst();
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.MapItem.create(level, 0, 0, (byte) 0, true, false));
+        });
+        context.waitTicks(200);
+        String report = world.getServer().computeOnServer(s -> {
+            var player = s.getPlayerList().getPlayers().getFirst();
+            var data = net.minecraft.world.item.MapItem.getSavedData(player.getMainHandItem(), s.overworld());
+            if (data == null) return "no map data";
+            int red = net.minecraft.world.level.material.MapColor.COLOR_RED.id, stone = net.minecraft.world.level.material.MapColor.STONE.id;
+            int redPixels = 0, stonePixels = 0, drawn = 0;
+            java.util.Set<Integer> colours = new java.util.TreeSet<>();
+            for (byte b : data.colors) {
+                int id = (b & 0xFF) >> 2;
+                if (id == 0) continue;
+                drawn++;
+                colours.add(id);
+                if (id == red) redPixels++;
+                if (id == stone) stonePixels++;
+            }
+            return drawn + " pixels drawn, " + redPixels + " red (the wool: 256 at this scale), " + stonePixels + " stone grey, colours " + colours;
+        });
+        LOGGER.info("[cc-gametest] maps: {}", report);
+        world.getServer().runCommand("clear @a");
     }
 
     private static void loadCubeAndWait(ClientGameTestContext context, TestSingleplayerContext world, net.minecraft.server.level.TicketType ticket,
