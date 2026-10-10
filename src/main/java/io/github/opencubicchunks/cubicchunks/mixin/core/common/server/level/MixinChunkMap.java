@@ -129,6 +129,7 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     @Shadow @Final private Long2ObjectLinkedOpenHashMap<ChunkHolder> pendingUnloads;
     @Shadow @Final private Long2LongMap nextChunkSaveTime;
     @Shadow @Final private Queue<Runnable> unloadQueue;
+    @Shadow @Final private net.minecraft.server.level.PlayerMap playerMap;
 
     @Shadow @Final private static CompletableFuture<ChunkResult<List<CloAccess>>> UNLOADED_CHUNK_LIST_FUTURE;
     @Shadow @Final private static ChunkResult<List<CloAccess>> UNLOADED_CHUNK_LIST_RESULT;
@@ -172,6 +173,12 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
         }
     }
 
+
+    @Override public void cc_updateCubeTracking(ServerPlayer player) {
+        if (cc_cubeStorage != null) {
+            this.cc_updateChunkTracking(player);
+        }
+    }
 
     @Override public int cc_pendingCubeWrites() {
         return cc_cubeStorage == null ? 0 : cc_cubeStorage.pendingWrites();
@@ -795,6 +802,21 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     @AddTransformToSets(ChunkToCloSet.ChunkMap_redirects.class)
     @TransformFromMethod("move(Lnet/minecraft/server/level/ServerPlayer;)V")
     public native void cc_move(ServerPlayer player);
+
+    /**
+     * The server's view distance changed (in singleplayer, as the render distance is changed): vanilla gives each player the new reach in
+     * columns; in a cubic level, in cubes too (until then they kept the old one until they moved into another cube, and the cubes past it
+     * were never sent).
+     */
+    @Inject(method = "setServerViewDistance", at = @At("RETURN"))
+    private void cc_cubeTrackingFollowsViewDistance(int newViewDistance, CallbackInfo ci) {
+        if (cc_cubeStorage == null) {
+            return;
+        }
+        for (ServerPlayer player : this.playerMap.getAllPlayers()) {
+            this.cc_updateChunkTracking(player);
+        }
+    }
 
     // region [cc_updateChunkTracking dasm + mixin]
     @AddTransformToSets(ChunkToCloSet.ChunkMap_redirects.class)

@@ -74,7 +74,7 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
             cc_light = new CubicLight(new ClientCubeLightView(level, this), new io.github.opencubicchunks.cubicchunks.world.lighting.SkyRoofs(null), () -> CubeLightEngine.of(level.getLightEngine()),
                     () -> CubeLightEngine.of(level.getLightEngine()));
             // TODO we could redirect the initial construction instead of immediately resizing. doesn't really matter
-            updateViewRadius(cc_calculateChunkViewDistance(viewDistance));
+            this.cc_resizeColumns(viewDistance);
         }
     }
 
@@ -174,6 +174,31 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
 
     @Shadow public abstract void updateViewRadius(int viewDistance);
 
+    @org.spongepowered.asm.mixin.Unique private boolean cc_resizingColumns;
+
+    /**
+     * The server's view distance changed (its SetChunkCacheRadius packet, as when the render distance is changed in singleplayer): in a
+     * cubic level the cube storage is resized with the columns (it kept its first size, and cubes beyond it were dropped as they came).
+     */
+    @Inject(method = "updateViewRadius", at = @At("HEAD"), cancellable = true)
+    private void cc_resizeCubesToo(int viewDistance, CallbackInfo ci) {
+        if (this.cc_cubeStorage == null || this.cc_resizingColumns) {
+            return;
+        }
+        ci.cancel();
+        this.cc_updateViewRadius(viewDistance);
+    }
+
+    /** The columns' storage, for a view distance in cubes (vanilla's resize, not taken for the cubes' above). */
+    @org.spongepowered.asm.mixin.Unique private void cc_resizeColumns(int cubeViewDistance) {
+        this.cc_resizingColumns = true;
+        try {
+            updateViewRadius(cc_calculateChunkViewDistance(cubeViewDistance));
+        } finally {
+            this.cc_resizingColumns = false;
+        }
+    }
+
     @Override public void cc_updateViewRadius(int viewDistance) {
         int i = this.cc_cubeStorage.cubeRadius;
         int j = calculateStorageRange(viewDistance);
@@ -194,7 +219,7 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
             }
             this.cc_cubeStorage = storage;
         }
-        updateViewRadius(cc_calculateChunkViewDistance(viewDistance));
+        this.cc_resizeColumns(viewDistance);
     }
 
     @Shadow private static int calculateStorageRange(int viewDistance) {

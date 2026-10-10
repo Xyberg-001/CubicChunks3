@@ -1137,7 +1137,10 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         int start = context.computeOnClient(mc -> mc.options.renderDistance().get());
         LOGGER.info("[cc-gametest] view distance: render distance {}: {}", start, loadedCounts(context, world));
         for (int distance : new int[] { 4, 12, start }) {
-            context.runOnClient(mc -> mc.options.renderDistance().set(distance));
+            context.runOnClient(mc -> {
+                mc.options.renderDistance().set(distance);
+                mc.options.broadcastOptions(); // as the options screen does as it closes
+            });
             context.waitTicks(LOAD_TICKS);
             LOGGER.info("[cc-gametest] view distance: render distance {}: {}", distance, loadedCounts(context, world));
         }
@@ -1148,7 +1151,12 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         int client = context.computeOnClient(mc -> ((io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource) mc.level.getChunkSource())
                 .cc_getLoadedCubeCount());
         int serverView = world.getServer().computeOnServer(s -> s.getPlayerList().getViewDistance());
-        return "server view distance " + serverView + ", server cube and column holders " + server + ", client cubes held " + client;
+        String tracking = world.getServer().computeOnServer(s -> String.valueOf(((io.github.opencubicchunks.cubicchunks.server.level.CCServerPlayer)
+                s.getPlayerList().getPlayers().getFirst()).cc_getCloTrackingView()));
+        int clientRadius = context.computeOnClient(mc -> ((io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache) mc.level.getChunkSource())
+                .cc_cubeViewRadius());
+        return "server view distance " + serverView + ", server cube and column holders " + server + ", client cubes held " + client
+                + ", player's cube tracking " + tracking + ", client cube storage radius " + clientRadius;
     }
 
     /** The air block above the highest block of x, z below Y 200. */

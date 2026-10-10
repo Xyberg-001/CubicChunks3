@@ -31,4 +31,17 @@ public abstract class MixinServerPlayer extends MixinEntity implements CCServerP
     // TODO P3 :: changeDimension
 
     // FIXME (P2) teleportation code needs CC changes
+
+    /**
+     * The player's client says its render distance changed (as its options screen closes): in a cubic level their reach in cubes follows at
+     * once (vanilla's in columns waits until they move into another chunk; for cubes the old reach held until they moved into another cube).
+     */
+    @org.spongepowered.asm.mixin.injection.Inject(method = "updateOptions", at = @org.spongepowered.asm.mixin.injection.At("RETURN"))
+    private void cc_cubeReachFollowsRenderDistance(net.minecraft.server.level.ClientInformation information,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        net.minecraft.server.level.ServerPlayer self = (net.minecraft.server.level.ServerPlayer) (Object) this;
+        if (self.connection != null && ((io.github.opencubicchunks.cubicchunks.CanBeCubic) self.level()).cc_isCubic()) {
+            ((io.github.opencubicchunks.cubicchunks.server.level.CubicChunkMap) self.level().getChunkSource().chunkMap).cc_updateCubeTracking(self);
+        }
+    }
 }

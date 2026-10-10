@@ -23,6 +23,9 @@ public interface CubicChunkMap {
     /** The cube's saved data, or empty if it was never saved (read on the cube storage's thread, after any pending writes). */
     CompletableFuture<Optional<CompoundTag>> cc_readSavedCube(CubePos cubePos);
 
+    /** The player's reach in cubes, worked out again (their render distance or the server's view distance changed). */
+    void cc_updateCubeTracking(net.minecraft.server.level.ServerPlayer player);
+
     /** Cube and column writes queued on the cube store and not done yet (0 when the level has none). */
     int cc_pendingCubeWrites();
 
