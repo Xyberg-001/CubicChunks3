@@ -17,7 +17,8 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 /**
  * Light for the cubes of a cubic level, on either side. The side's own vanilla light engine does the propagation; it reads the level through
  * {@link CubicLightColumn}s (blocks, light sources and sky sources from the cubes a {@link CubeLightView} gives). Sky light enters each column
- * below the lowest opaque edge under its highest cube: what lies above those cubes, or in cubes not given, counts as open sky.
+ * below its highest occluding edge: in the cubes given, or noted of cubes no longer loaded ({@link SkyRoofs}); above those, and in cubes not
+ * given, is open sky.
  * <p>
  * {@link #onCubeLoaded} reads and resets sky sources while the engine works, so on the server it runs as a task of the light thread, with
  * engine calls applied at once ({@code immediate}); the rest may come from any thread and goes through {@code queued}. On the client both are
@@ -25,6 +26,7 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
  */
 public final class CubicLight {
     private final CubeLightView view;
+    private final @org.jetbrains.annotations.Nullable SkyRoofs roofs;
     private final Supplier<CubeLightEngine> immediate;
     private final Supplier<CubeLightEngine> queued;
     private final ConcurrentHashMap<Long, CubicLightColumn> columns = new ConcurrentHashMap<>();
@@ -32,14 +34,42 @@ public final class CubicLight {
     private final ConcurrentHashMap<Long, Integer> retainedColumns = new ConcurrentHashMap<>();
     private final Set<Long> retainedCubes = ConcurrentHashMap.newKeySet();
 
-    public CubicLight(CubeLightView view, Supplier<CubeLightEngine> immediate, Supplier<CubeLightEngine> queued) {
+    /**
+     * {@code roofs}: where the sky is stopped in cubes not loaded (the server's, kept on disk; the client's, from the cubes it held and the
+     * roofs the server sends with each cube).
+     */
+    public CubicLight(CubeLightView view, @org.jetbrains.annotations.Nullable SkyRoofs roofs, Supplier<CubeLightEngine> immediate,
+            Supplier<CubeLightEngine> queued) {
         this.view = view;
+        this.roofs = roofs;
         this.immediate = immediate;
         this.queued = queued;
     }
 
     public CubicLightColumn column(int chunkX, int chunkZ) {
-        return this.columns.computeIfAbsent(ChunkPos.pack(chunkX, chunkZ), key -> new CubicLightColumn(this.view, chunkX, chunkZ));
+        return this.columns.computeIfAbsent(ChunkPos.pack(chunkX, chunkZ), key -> new CubicLightColumn(this.view, this.roofs, chunkX, chunkZ));
+    }
+
+    /**
+     * A cube is leaving the cubes light reads (its holder is let go; it unloads once saved): what it roofs is noted now, or a cube lit
+     * meanwhile under it would see neither it nor its roof.
+     */
+    public void noteRoof(CubeAccess cube) {
+        if (this.roofs != null) {
+            this.roofs.record(cube);
+        }
+    }
+
+    /** Where the sky is stopped in cubes not loaded, or null where light is not worked out from them. */
+    public @org.jetbrains.annotations.Nullable SkyRoofs roofs() {
+        return this.roofs;
+    }
+
+    /** Writes the sky roofs that changed (with the level's save). */
+    public void saveRoofs() {
+        if (this.roofs != null) {
+            this.roofs.save();
+        }
     }
 
     /**
@@ -58,6 +88,9 @@ public final class CubicLight {
     public void onCubeLoaded(CubeAccess cube, boolean lighted) {
         CubeLightEngine engine = this.immediate.get();
         CubePos cubePos = cube.cc_getCubePos();
+        if (this.roofs != null) {
+            this.roofs.record(cube); // what it roofs, for when it is not loaded
+        }
         LevelChunkSection[] sections = cube.getSections();
         for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
             for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
@@ -107,6 +140,9 @@ public final class CubicLight {
     public void onCubeLitByServer(CubeAccess cube) {
         CubeLightEngine engine = this.immediate.get();
         CubePos cubePos = cube.cc_getCubePos();
+        if (this.roofs != null) {
+            this.roofs.record(cube);
+        }
         LevelChunkSection[] sections = cube.getSections();
         for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {
             for (int dy = 0; dy < CubicConstants.DIAMETER_IN_SECTIONS; dy++) {
@@ -174,13 +210,24 @@ public final class CubicLight {
         for (CubeAccess cube : this.view.cubesTopDown(Coords.blockToCube(x), Coords.blockToCube(z))) {
             cubes.append(cubes.isEmpty() ? "" : ",").append(cube.cc_getCubePos().getY());
         }
-        return "sky enters at " + (lowest == Integer.MIN_VALUE ? "-inf" : Integer.toString(lowest)) + " over cubes Y " + cubes;
+        StringBuilder roofs = new StringBuilder();
+        if (this.roofs != null) {
+            for (SkyRoofs.Roof roof : this.roofs.column(chunkX, chunkZ)) {
+                int y = roof.sourceY(SectionPos.sectionRelative(x), SectionPos.sectionRelative(z));
+                roofs.append(roofs.isEmpty() ? "" : ",").append(roof.cubeY()).append(y == Integer.MIN_VALUE ? "(open)" : "(" + (y - 1) + ")");
+            }
+        }
+        return "sky enters at " + (lowest == Integer.MIN_VALUE ? "-inf" : Integer.toString(lowest)) + " over cubes Y " + cubes
+                + "; roofs noted in cubes Y " + (roofs.isEmpty() ? "none" : roofs);
     }
 
     /** A cube has left: its sections' light goes, and the sky over its columns is worked out again when next needed. */
     public void onCubeUnloaded(CubeAccess cube) {
         CubeLightEngine engine = this.queued.get();
         CubePos cubePos = cube.cc_getCubePos();
+        if (this.roofs != null) {
+            this.roofs.record(cube); // as it leaves: the sky stays stopped where it stops it
+        }
         engine.runPendingUpdates(new ChunkPos(Coords.cubeToSection(cubePos.getX(), 0), Coords.cubeToSection(cubePos.getZ(), 0)));
         this.release(cubePos, engine); // in case it leaves before its light was initialised
         for (int dx = 0; dx < CubicConstants.DIAMETER_IN_SECTIONS; dx++) {

@@ -25,15 +25,15 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.entity.player.Player;
 
 /** A cube and its light, as vanilla's ClientboundLevelChunkWithLightPacket is a chunk and its light. */
-public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLevelCubePacketData cubeData, CubeLightData light)
-        implements CustomPacketPayload {
+public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLevelCubePacketData cubeData, CubeLightData light,
+                                                    CubeRoofsData roofs) implements CustomPacketPayload {
     public static final Type<CCClientboundLevelCubeWithLightPacket> TYPE = new Type<>(
             Identifier.fromNamespaceAndPath(CubicChunks.MODID, "level_cube_with_light"));
 
     public static final StreamCodec<FriendlyByteBuf, CCClientboundLevelCubeWithLightPacket> STREAM_CODEC = StreamCodec.composite(
             CUBE_POS_STREAM_CODEC, CCClientboundLevelCubeWithLightPacket::pos, CCClientboundLevelCubePacketData.STREAM_CODEC,
             CCClientboundLevelCubeWithLightPacket::cubeData, CubeLightData.STREAM_CODEC, CCClientboundLevelCubeWithLightPacket::light,
-            CCClientboundLevelCubeWithLightPacket::new);
+            CubeRoofsData.STREAM_CODEC, CCClientboundLevelCubeWithLightPacket::roofs, CCClientboundLevelCubeWithLightPacket::new);
 
     @Override public Type<? extends CustomPacketPayload> type() {
         return TYPE;
@@ -41,7 +41,13 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
 
     public CCClientboundLevelCubeWithLightPacket(LevelCube cube) {
         this(cube.cc_getCloPos().cubePos(), new CCClientboundLevelCubePacketData(cube),
-                CubeLightData.of(cube.getLevel().getLightEngine(), cube.cc_getCloPos().cubePos(), CubeLightData.ALL_SECTIONS));
+                CubeLightData.of(cube.getLevel().getLightEngine(), cube.cc_getCloPos().cubePos(), CubeLightData.ALL_SECTIONS),
+                CubeRoofsData.of(roofsOf(cube.getLevel()), cube.cc_getCloPos().cubePos()));
+    }
+
+    private static io.github.opencubicchunks.cubicchunks.world.lighting.@org.jetbrains.annotations.Nullable SkyRoofs roofsOf(Level level) {
+        CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+        return light == null ? null : light.roofs();
     }
 
     public static class Handler implements CCPayloadHandler<CCClientboundLevelCubeWithLightPacket> {
@@ -70,6 +76,9 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
                 if (levelCube != null) {
                     payload.light.queueTo(((ClientLevel) level).getLightEngine(), payload.pos);
                     CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+                    if (light != null && light.roofs() != null) {
+                        payload.roofs.applyTo(light.roofs(), payload.pos);
+                    }
                     if (light != null) {
                         light.onCubeLitByServer(levelCube);
                     }

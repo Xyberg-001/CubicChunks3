@@ -192,6 +192,10 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     @Inject(method = "close", at = @At("HEAD"))
     private void cc_onClose(CallbackInfo ci) throws IOException {
         if (cc_cubeStorage != null) {
+            CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+            if (light != null) {
+                light.saveRoofs(); // the cubes' last unloads noted theirs
+            }
             cc_cubeStorage.close();
             CubicChunks.LOGGER.info("Cubes in {}: {} loaded from disk, {} new, {} saves, {} unloaded", level.dimension().identifier(),
                     cc_cubesLoaded.get(), cc_cubesCreated.get(), cc_cubesSaved.get(), cc_cubesUnloaded.get());
@@ -369,6 +373,10 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     private void cc_onSaveAllChunks(boolean flush, CallbackInfo ci) {
         if (((CanBeCubic) level).cc_isCubic()) {
             cc_saveAllChunks(flush);
+            CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+            if (light != null) {
+                light.saveRoofs();
+            }
             if (flush && cc_cubeStorage != null) {
                 cc_cubeStorage.synchronize();
             }
@@ -397,6 +405,12 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
 
     @AddMethodToSets(containers = ChunkToCloSet.ChunkMap_redirects.class, method = "scheduleUnload(JLnet/minecraft/server/level/ChunkHolder;)V")
     private void cc_scheduleUnload(long cloPos, ChunkHolder holder) {
+        if (((GenerationCloHolder) holder).cc_getLatestClo() instanceof CubeAccess leaving) {
+            CubicLight light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+            if (light != null) {
+                light.noteRoof(leaving);
+            }
+        }
         CompletableFuture<?> saveSync = holder.getSaveSyncFuture();
         saveSync.thenRunAsync(() -> {
             if (holder.getSaveSyncFuture() != saveSync) {

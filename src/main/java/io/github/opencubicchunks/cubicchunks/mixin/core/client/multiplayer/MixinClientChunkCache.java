@@ -71,7 +71,7 @@ public abstract class MixinClientChunkCache extends MixinChunkSource implements 
             cc_emptyCube = new EmptyLevelCube(level, CubePos.of(0, 0, 0),
                     level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.PLAINS));
             cc_cubeStorage = new ClientCubeCache.Storage(calculateStorageRange(viewDistance), level);
-            cc_light = new CubicLight(new ClientCubeLightView(level, this), () -> CubeLightEngine.of(level.getLightEngine()),
+            cc_light = new CubicLight(new ClientCubeLightView(level, this), new io.github.opencubicchunks.cubicchunks.world.lighting.SkyRoofs(null), () -> CubeLightEngine.of(level.getLightEngine()),
                     () -> CubeLightEngine.of(level.getLightEngine()));
             // TODO we could redirect the initial construction instead of immediately resizing. doesn't really matter
             updateViewRadius(cc_calculateChunkViewDistance(viewDistance));

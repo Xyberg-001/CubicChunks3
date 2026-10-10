@@ -28,11 +28,11 @@ public final class CubicLightColumn implements LightChunk {
     private final int chunkZ;
     private final CubicSkyLightSources skyLightSources;
 
-    CubicLightColumn(CubeLightView view, int chunkX, int chunkZ) {
+    CubicLightColumn(CubeLightView view, @org.jetbrains.annotations.Nullable SkyRoofs roofs, int chunkX, int chunkZ) {
         this.view = view;
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
-        this.skyLightSources = new CubicSkyLightSources(view, chunkX, chunkZ);
+        this.skyLightSources = new CubicSkyLightSources(view, roofs, chunkX, chunkZ);
     }
 
     CubicSkyLightSources sources() {

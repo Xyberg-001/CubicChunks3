@@ -125,6 +125,7 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
         if (((CanBeCubic) level).cc_isCubic()) {
             this.cc_setCubic();
             this.cc_light = new CubicLight(new ServerCubeLightView(level, this::getVisibleChunkIfPresent),
+                    new io.github.opencubicchunks.cubicchunks.world.lighting.SkyRoofs(levelStorageAccess.getDimensionPath(level.dimension())),
                     () -> ((CubicThreadedLightEngine) this.getLightEngine()).cc_onLightThread(), () -> CubeLightEngine.of(this.getLightEngine()));
         }
     }

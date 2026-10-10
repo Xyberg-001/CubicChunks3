@@ -61,6 +61,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("cliententities")) clientEntities(context, world);
             if (stage("tint")) tintCaches(context);
             if (stage("lightsync")) lightSync(context, world);
+            if (stage("skyroof")) skyRoof(context, world);
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
             if (stage("shaders")) shaders(context, world);
@@ -764,6 +765,65 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
                         net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) != null));
         LOGGER.info("[cc-gametest] light sync: sky under the roof (-32 30 32) on the server {} before the roof, {} after; {}", skyBefore, skyAfter, clientSide);
         LOGGER.info("[cc-gametest] light sync: roof at Y 200 {}", compareLight(context, world, new BlockPos(-32, 10, 32)));
+    }
+
+    /**
+     * The sky stays stopped under a roof whose cube is no longer loaded (SkyRoofs): far from the player, a cube high up gets a stone roof and
+     * is let go; then an empty cube far below it is loaded with nothing in between. Its middle must get no sky light (it got full sky light
+     * when everything above the loaded cubes counted as open sky); a column beside it with no roof still does.
+     */
+    private static void skyRoof(ClientGameTestContext context, TestSingleplayerContext world) {
+        net.minecraft.server.level.TicketType ticket = new net.minecraft.server.level.TicketType(net.minecraft.server.level.TicketType.NO_TIMEOUT,
+                net.minecraft.server.level.TicketType.FLAG_LOADING);
+        int cubeX = 93, cubeZ = 93, roofCubeY = 30, lowCubeY = 10, openCubeX = 95;
+        int roofY = Coords.cubeToMinBlock(roofCubeY) + 20;
+        int middleX = Coords.cubeToMinBlock(cubeX) + 16, middleZ = Coords.cubeToMinBlock(cubeZ) + 16;
+        loadCubeAndWait(context, world, ticket, cubeX, roofCubeY, cubeZ);
+        world.getServer().runCommand("fill " + Coords.cubeToMinBlock(cubeX) + " " + roofY + " " + Coords.cubeToMinBlock(cubeZ) + " "
+                + (Coords.cubeToMinBlock(cubeX) + 31) + " " + roofY + " " + (Coords.cubeToMinBlock(cubeZ) + 31) + " minecraft:stone");
+        context.waitTicks(40);
+        world.getServer().runOnServer(server -> io.github.opencubicchunks.cubicchunks.api.CubicApi.releaseCube(server.overworld(), ticket, cubeX,
+                roofCubeY, cubeZ));
+        boolean gone = false;
+        for (int i = 0; i < 30 && !gone; i++) {
+            context.waitTicks(20);
+            gone = world.getServer().computeOnServer(server -> ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) server.overworld()
+                    .getChunkSource()).cc_getCubeNow(io.github.opencubicchunks.cc_core.api.CubePos.of(cubeX, roofCubeY, cubeZ), ChunkStatus.EMPTY) == null);
+        }
+        String before = world.getServer().computeOnServer(server -> {
+            var light = ((CubeSource) server.overworld().getChunkSource()).cc_cubicLight();
+            return light == null ? "" : light.describeSky(middleX, middleZ);
+        });
+        LOGGER.info("[cc-gametest] sky roof: before the low cube loads: {}", before);
+        loadCubeAndWait(context, world, ticket, cubeX, lowCubeY, cubeZ);
+        loadCubeAndWait(context, world, ticket, openCubeX, lowCubeY, cubeZ);
+        context.waitTicks(40);
+        int lowY = Coords.cubeToMinBlock(lowCubeY) + 16;
+        BlockPos under = new BlockPos(middleX, lowY, middleZ);
+        BlockPos open = new BlockPos(Coords.cubeToMinBlock(openCubeX) + 16, lowY, middleZ);
+        String report = world.getServer().computeOnServer(server -> {
+            var level = server.overworld();
+            var light = ((CubeSource) level.getChunkSource()).cc_cubicLight();
+            return "sky " + level.getBrightness(LightLayer.SKY, under) + " under the roof, " + level.getBrightness(LightLayer.SKY, open)
+                    + " beside it; " + (light == null ? "" : light.describeSky(under.getX(), under.getZ()));
+        });
+        LOGGER.info("[cc-gametest] sky roof: roof cube let go {}; {}", gone, report);
+        world.getServer().runOnServer(server -> {
+            io.github.opencubicchunks.cubicchunks.api.CubicApi.releaseCube(server.overworld(), ticket, cubeX, lowCubeY, cubeZ);
+            io.github.opencubicchunks.cubicchunks.api.CubicApi.releaseCube(server.overworld(), ticket, openCubeX, lowCubeY, cubeZ);
+        });
+    }
+
+    private static void loadCubeAndWait(ClientGameTestContext context, TestSingleplayerContext world, net.minecraft.server.level.TicketType ticket,
+            int x, int y, int z) {
+        java.util.concurrent.atomic.AtomicReference<java.util.concurrent.CompletableFuture<Boolean>> future = new java.util.concurrent.atomic.AtomicReference<>();
+        world.getServer().runOnServer(server -> future.set(io.github.opencubicchunks.cubicchunks.api.CubicApi.loadCube(server.overworld(), ticket, x, y, z)));
+        for (int i = 0; i < 60 && !future.get().isDone(); i++) {
+            context.waitTicks(10);
+        }
+        if (!future.get().isDone()) {
+            LOGGER.info("[cc-gametest] sky roof: cube {}, {}, {} did not load", x, y, z);
+        }
     }
 
     private static String compareLight(ClientGameTestContext context, TestSingleplayerContext world, BlockPos center) {
