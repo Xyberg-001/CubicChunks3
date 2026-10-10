@@ -66,6 +66,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("dimensions")) dimensions(context, world);
             if (stage("heightmaps")) heightmaps(context, world);
             if (stage("maps")) maps(context, world);
+            if (stage("frames")) frames(context, world);
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
             if (stage("shaders")) shaders(context, world);
@@ -99,6 +100,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             String client = context.computeOnClient(mc -> "client level cubic " + ((CanBeCubic) mc.level).cc_isCubic() + ", client chunks "
                     + mc.level.getChunkSource().getLoadedChunksCount() + ", block at 0 -55 0 " + mc.level.getBlockState(new BlockPos(0, -55, 0)).getBlock());
             LOGGER.info("[cc-gametest] vanilla world: {}; {}", server, client);
+            if (stage("frames")) framesAt(context, world, -30);
             context.takeScreenshot("cc-vanilla-world");
         }
     }
@@ -972,6 +974,65 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         });
         LOGGER.info("[cc-gametest] maps: {}", report);
         world.getServer().runCommand("clear @a");
+    }
+
+    /**
+     * Entity culling with Sodium (needs -PwithSodium), on the ground and at Y 1500 (beyond the dimension type's heights, as an Orbis world's
+     * ground is): item frames in the open in front of the player are drawn, those behind the player and those inside a solid 48-block stone
+     * cube in front (in its middle section, which no line of sight reaches) are not. The vanilla world stage does the same for comparison.
+     */
+    private static void frames(ClientGameTestContext context, TestSingleplayerContext world) {
+        for (int y : new int[]{40, 1500}) {
+            framesAt(context, world, y);
+        }
+    }
+
+    private static void framesAt(ClientGameTestContext context, TestSingleplayerContext world, int y) {
+        int section = Math.floorDiv(y, 16) * 16; // the solid cube's sections line up with the player's
+        world.getServer().runCommand("gamemode creative @a");
+        world.getServer().runCommand("tp @a 0 " + y + " 8 -90 0");
+        world.getServer().runCommand("fill -2 " + (y - 1) + " 6 2 " + (y - 1) + " 10 minecraft:stone");
+        for (int sy = section - 16; sy < section + 32; sy += 16) {
+            for (int sz = -16; sz < 32; sz += 24) {
+                world.getServer().runCommand("fill 32 " + sy + " " + sz + " 79 " + (sy + 15) + " " + (sz + 23) + " minecraft:stone");
+            }
+        }
+        // in the middle section (x 48..63, z 0..15) of the solid cube, behind the player, and in the open in front: each group on its own,
+        // counted as the change in the entities the renderer drew last frame (vanilla's F3 "E:" count)
+        world.getServer().runCommand("setblock -12 " + y + " 8 minecraft:stone");
+        world.getServer().runCommand("setblock 12 " + y + " 8 minecraft:stone");
+        context.waitTicks(LOAD_TICKS);
+        StringBuilder result = new StringBuilder();
+        String[][] groups = {
+                {"sealed in stone", "56", "4"}, {"behind the player", "-11", "5"}, {"in the open", "11", "4"}};
+        for (String[] group : groups) {
+            int before = drawnEntities(context);
+            int count = 0;
+            for (int dy = 2; dy <= 12; dy += 5) {
+                for (int dz = 2; dz <= 12; dz += 5) {
+                    int fy = group[1].equals("56") ? section + dy : y + (dy - 7) / 5;
+                    int fz = group[1].equals("56") ? dz : 8 + (dz - 7) / 5;
+                    if (!group[1].equals("56") && (dy != 7 && dz != 7)) continue;
+                    world.getServer().runCommand("summon minecraft:item_frame " + group[1] + " " + fy + " " + fz + " {Facing:" + group[2] + "b,Fixed:1b}");
+                    count++;
+                }
+            }
+            context.waitTicks(40);
+            int after = drawnEntities(context);
+            result.append(result.isEmpty() ? "" : ", ").append(group[0]).append(" ").append(after - before).append(" of ").append(count).append(" drawn");
+            world.getServer().runCommand("kill @e[type=minecraft:item_frame]");
+            context.waitTicks(20);
+        }
+        String cubicNote = context.computeOnClient(mc -> " (client level cubic " + ((CanBeCubic) mc.level).cc_isCubic() + ")");
+        result.append(cubicNote);
+        LOGGER.info("[cc-gametest] frames at Y {}: {}", y, result);
+        world.getServer().runCommand("kill @e[type=minecraft:item_frame]");
+    }
+
+    /** How many entities the renderer drew in the last frame (vanilla's F3 "E:" count). */
+    private static int drawnEntities(ClientGameTestContext context) {
+        String stats = context.computeOnClient(mc -> mc.levelExtractor.entityStatistics());
+        return stats == null ? -1 : Integer.parseInt(stats.substring(3, stats.indexOf('/')));
     }
 
     private static void loadCubeAndWait(ClientGameTestContext context, TestSingleplayerContext world, net.minecraft.server.level.TicketType ticket,
