@@ -128,13 +128,16 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
         }
     }
 
-    /** A level is cubic if its world is: the server's world, or for a client level the server it joined (see CubicWorldSettings). */
+    /**
+     * A level is cubic if its world is and makes its dimension cubic: the server's world, or for a client level the server it joined (see
+     * CubicWorldSettings).
+     */
     @Inject(method = "<init>", at = @At(value = "CTOR_HEAD"))
     private void cc_init(
             WritableLevelData levelData, ResourceKey<Level> dimension, RegistryAccess registryAccess, Holder<DimensionType> dimensionType,
             boolean isClientSide, boolean isDebug, long biomeZoomSeed, int maxChainedNeighborUpdates, CallbackInfo ci
     ) {
-        CubicWorldSettings settings = CubicWorldSettings.forNewLevel(isClientSide);
+        CubicWorldSettings settings = CubicWorldSettings.forNewLevel(isClientSide, dimension);
         if (settings.cubic()) {
             this.cc_setCubic();
             this.cc_minBuildY = settings.minY();

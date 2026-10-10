@@ -3,6 +3,7 @@ package io.github.opencubicchunks.cubicchunks.world;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -14,21 +15,39 @@ import io.github.opencubicchunks.cubicchunks.config.CommonConfig;
 import io.github.opencubicchunks.cubicchunks.config.WorldConfig;
 import io.github.opencubicchunks.cubicchunks.server.level.CubeYRange;
 import io.github.opencubicchunks.cubicchunks.world.level.CubicHeight;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource;
 
 /**
- * Whether a world uses cubic chunks, and the heights its cubic levels hold (every dimension of the world alike). Chosen when the world is
- * made (the world creation screen's Cubic Chunks tab, or the config for a server's new world) and saved in its folder (see WorldConfig), so
+ * Whether a world uses cubic chunks, the heights its cubic levels hold, and which of its dimensions are cubic: the overworld (the
+ * Nether and the End, and other mods' dimensions, stay as vanilla makes them: their generators make chunks, not cubes, and the End's
+ * sea level at Y 0 is a cubic overworld's too). Chosen when the world is made (the world creation screen's Cubic Chunks tab, or the config for a server's new world) and saved in its folder (see WorldConfig), so
  * a world never changes with the config: a world made without cubic chunks stays vanilla with the mod installed.
  * <p>
  * The server decides as it creates its levels ({@link #decideForServer}); the client is told in the configuration phase of joining
  * (CCClientboundWorldSettingsPacket), before it makes its levels. Each level reads the settings of its side as it is constructed
  * (MixinLevel).
  */
-public record CubicWorldSettings(boolean cubic, int minY, int maxY) {
+public record CubicWorldSettings(boolean cubic, int minY, int maxY, List<String> dimensions) {
+    /** The dimensions a new cubic world makes cubic. */
+    public static final List<String> NEW_WORLD_DIMENSIONS = List.of(Level.OVERWORLD.identifier().toString());
     public static final CubicWorldSettings VANILLA = new CubicWorldSettings(false, 0, 0);
+
+    public CubicWorldSettings {
+        dimensions = List.copyOf(dimensions);
+    }
+
+    /** A new world's settings: only the overworld cubic. */
+    public CubicWorldSettings(boolean cubic, int minY, int maxY) {
+        this(cubic, minY, maxY, NEW_WORLD_DIMENSIONS);
+    }
+
+    /** Whether a level of this dimension is cubic in this world. */
+    public boolean cubicIn(ResourceKey<Level> dimension) {
+        return this.cubic && this.dimensions.contains(dimension.identifier().toString());
+    }
     /** Cube worlds made before worlds kept their own settings get the config's default heights. */
     private static final CubicWorldSettings OLD_CUBIC = new CubicWorldSettings(true, CommonConfig.DEFAULT_NEW_WORLD_MIN_Y,
             CommonConfig.DEFAULT_NEW_WORLD_MAX_Y);
@@ -76,13 +95,16 @@ public record CubicWorldSettings(boolean cubic, int minY, int maxY) {
     public CubicWorldSettings clamped() {
         int min = Math.clamp(this.minY, lowestY(), highestY() - 1);
         int max = Math.clamp(this.maxY, min + 1, highestY());
-        return new CubicWorldSettings(this.cubic, min, max);
+        return new CubicWorldSettings(this.cubic, min, max, this.dimensions);
     }
 
-    /** The settings of the levels a side is about to make (a client level: the server it joined; a server level: its world's). */
-    public static CubicWorldSettings forNewLevel(boolean clientSide) {
+    /**
+     * The settings of a level a side is about to make (a client level: the server it joined; a server level: its world's), or {@link #VANILLA}
+     * for a dimension the world does not make cubic.
+     */
+    public static CubicWorldSettings forNewLevel(boolean clientSide, ResourceKey<Level> dimension) {
         CubicWorldSettings settings = clientSide ? client : server;
-        return settings == null ? VANILLA : settings;
+        return settings == null || !settings.cubicIn(dimension) ? VANILLA : settings;
     }
 
     /** The world the running server has loaded. */
@@ -134,6 +156,17 @@ public record CubicWorldSettings(boolean cubic, int minY, int maxY) {
             settings = fromConfig();
             source = "a new world, from the config";
         }
+        if (settings.cubic && saved.isPresent() && !WorldConfig.hasDimensions(worldFolder)) {
+            // saved before worlds said which of their dimensions are cubic (all were): the overworld, and any other that holds cubes
+            List<String> dimensions = new java.util.ArrayList<>(NEW_WORLD_DIMENSIONS);
+            for (ResourceKey<Level> other : List.of(Level.NETHER, Level.END)) {
+                if (hasFiles(storage.getDimensionPath(other).resolve("region3d"))) {
+                    dimensions.add(other.identifier().toString());
+                }
+            }
+            settings = new CubicWorldSettings(settings.cubic, settings.minY, settings.maxY, dimensions);
+            WorldConfig.write(worldFolder, settings);
+        }
         String problem = settings.problem();
         if (problem != null) {
             throw new IllegalStateException("Cubic Chunks can't load this world: " + problem);
@@ -142,7 +175,7 @@ public record CubicWorldSettings(boolean cubic, int minY, int maxY) {
             WorldConfig.write(worldFolder, settings);
         }
         CubicChunks.LOGGER.info("World {}: {} ({})", storage.getLevelId(),
-                settings.cubic ? "cubic, Y " + settings.minY + " to " + settings.maxY : "not cubic", source);
+                settings.cubic ? "cubic, Y " + settings.minY + " to " + settings.maxY + " in " + settings.dimensions : "not cubic", source);
         server = settings;
         return settings;
     }

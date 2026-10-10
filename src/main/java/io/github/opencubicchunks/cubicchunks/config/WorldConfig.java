@@ -15,6 +15,7 @@ public final class WorldConfig extends BaseConfig {
     private static final String KEY_CUBIC = "cubic";
     private static final String KEY_MIN_Y = "minY";
     private static final String KEY_MAX_Y = "maxY";
+    private static final String KEY_DIMENSIONS = "dimensions";
 
     private WorldConfig() {
     }
@@ -36,6 +37,11 @@ public final class WorldConfig extends BaseConfig {
                  The lowest and highest Y blocks can be placed at in a cubic world. Raising the top or lowering the bottom is safe (within the
                  game's heightLimit config); narrowing them leaves what was built beyond them out of reach.\
                 """);
+        config.set(KEY_DIMENSIONS, new java.util.ArrayList<>(settings.dimensions()));
+        config.setComment(KEY_DIMENSIONS, """
+                 The dimensions that are cubic (the rest are vanilla's chunks, as made by their own generators). Fixed like the rest: a
+                 dimension switched over would leave what it saved unreadable.\
+                """);
         return config;
     }
 
@@ -47,7 +53,20 @@ public final class WorldConfig extends BaseConfig {
         }
         var config = create(CubicWorldSettings.VANILLA);
         read(file, config);
-        return Optional.of(new CubicWorldSettings(config.get(KEY_CUBIC), config.getInt(KEY_MIN_Y), config.getInt(KEY_MAX_Y)));
+        java.util.List<String> dimensions = config.get(KEY_DIMENSIONS);
+        return Optional.of(new CubicWorldSettings(config.get(KEY_CUBIC), config.getInt(KEY_MIN_Y), config.getInt(KEY_MAX_Y),
+                dimensions == null ? CubicWorldSettings.NEW_WORLD_DIMENSIONS : dimensions));
+    }
+
+    /** Whether the world's saved settings say which dimensions are cubic (worlds saved before they did made them all cubic). */
+    public static boolean hasDimensions(Path worldFolder) {
+        File file = file(worldFolder);
+        if (!file.exists()) {
+            return false;
+        }
+        var config = CommentedConfig.inMemory();
+        read(file, config);
+        return config.contains(KEY_DIMENSIONS);
     }
 
     public static void write(Path worldFolder, CubicWorldSettings settings) {

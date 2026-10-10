@@ -63,6 +63,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("lightsync")) lightSync(context, world);
             if (stage("skyroof")) skyRoof(context, world);
             if (stage("border")) border(context, world);
+            if (stage("dimensions")) dimensions(context, world);
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
             if (stage("shaders")) shaders(context, world);
@@ -835,6 +836,39 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
         world.getServer().runCommand("forceload remove all");
         LOGGER.info("[cc-gametest] border: limit {} (positions hold +-{}); {}; {}; forceloaded after one call beyond and one within: {}", limit,
                 CubicHeight.horizontalLimit(), server, client, forced);
+    }
+
+    /**
+     * Only the overworld of a cubic world is cubic: the Nether and the End are vanilla's chunks, made by their own generators (they make no
+     * cubes; the End's sea level, Y 0, is a cubic overworld's too). The player goes to each and back, and each side's level is checked.
+     */
+    private static void dimensions(ClientGameTestContext context, TestSingleplayerContext world) {
+        for (String[] place : new String[][]{{"minecraft:the_nether", "0 70 0"}, {"minecraft:the_end", "100 60 0"}, {"minecraft:overworld", "0 40 0"}}) {
+            world.getServer().runCommand("execute in " + place[0] + " run tp @a " + place[1]);
+            context.waitTicks(LOAD_TICKS);
+            String server = world.getServer().computeOnServer(s -> {
+                var player = s.getPlayerList().getPlayers().getFirst();
+                var level = player.level();
+                BlockPos below = player.blockPosition().below();
+                int solid = 0;
+                for (int dx = -32; dx <= 32; dx += 4) {
+                    for (int dz = -32; dz <= 32; dz += 4) {
+                        for (int y = level.getMinY(); y < Math.min(level.getMaxY(), level.getMinY() + 256); y += 8) {
+                            if (!level.getBlockState(new BlockPos(below.getX() + dx, y, below.getZ() + dz)).isAir()) solid++;
+                        }
+                    }
+                }
+                return level.dimension().identifier() + " cubic " + io.github.opencubicchunks.cubicchunks.api.CubicApi.isCubic(level) + ", Y "
+                        + level.getMinY() + ".." + level.getMaxY() + ", sea level " + level.getSeaLevel() + ", chunks " + level.getChunkSource().getLoadedChunksCount()
+                        + ", solid samples " + solid + ", player at " + player.blockPosition();
+            });
+            String client = context.computeOnClient(mc -> "client " + mc.level.dimension().identifier() + " cubic "
+                    + ((CanBeCubic) mc.level).cc_isCubic() + ", chunks " + mc.level.getChunkSource().getLoadedChunksCount() + ", cubes "
+                    + (((CanBeCubic) mc.level).cc_isCubic() ? ((io.github.opencubicchunks.cubicchunks.client.multiplayer.ClientCubeCache) mc.level
+                    .getChunkSource()).cc_getLoadedCubeCount() : 0)
+                    + ", block under the player " + mc.level.getBlockState(mc.player.blockPosition().below()).getBlock());
+            LOGGER.info("[cc-gametest] dimensions: {}; {}", server, client);
+        }
     }
 
     private static void loadCubeAndWait(ClientGameTestContext context, TestSingleplayerContext world, net.minecraft.server.level.TicketType ticket,
