@@ -25,6 +25,14 @@ public interface CubeSource {
         return null;
     }
 
+    /** A block in a cube changed: the column's surface (its heightmaps) may have. */
+    default void cc_onCubeBlockChanged(BlockPos pos) {
+        CubicLight light = this.cc_cubicLight();
+        if (light != null) {
+            light.onBlockChangedForSurface(pos);
+        }
+    }
+
     /** A block in a cube changed how it passes or gives light. */
     default void cc_onCubeLightPropertiesChanged(BlockPos pos) {
         CubicLight light = this.cc_cubicLight();

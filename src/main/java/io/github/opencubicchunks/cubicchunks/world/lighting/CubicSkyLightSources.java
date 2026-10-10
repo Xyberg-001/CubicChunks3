@@ -49,10 +49,94 @@ public final class CubicSkyLightSources extends ChunkSkyLightSources {
 
     void forgetAll() {
         Arrays.fill(this.lowestSourceY, UNKNOWN);
+        Arrays.fill(this.surfaceY, null);
     }
 
     void forget(int localX, int localZ) {
         this.lowestSourceY[localX + localZ * 16] = UNKNOWN;
+        this.forgetSurface(localX, localZ);
+    }
+
+    /** A block changed that may change the column's surface, if not its light. */
+    void forgetSurface(int localX, int localZ) {
+        for (int[] surface : this.surfaceY) {
+            if (surface != null) {
+                surface[localX + localZ * 16] = UNKNOWN;
+            }
+        }
+    }
+
+    // ---- heightmaps -------------------------------------------------------------------------------------------------------------------
+
+    /** By heightmap type, the Y above the highest block it counts in each block column (Integer.MIN_VALUE: none known), worked out when asked. */
+    private final int[][] surfaceY = new int[net.minecraft.world.level.levelgen.Heightmap.Types.values().length][];
+
+    /**
+     * What vanilla's heightmap of this type would say for a block column (the Y above its highest block of the kind), for a cubic column that
+     * keeps none: from the cubes this side holds, highest first, and above them the roofs noted of cubes not loaded (the topmost edge that
+     * stops light, the nearest there is to a heightmap of them). {@code fallback} where nothing is known (vanilla: the bottom of the world).
+     */
+    public int getSurfaceY(net.minecraft.world.level.levelgen.Heightmap.Types type, int x, int z, int fallback) {
+        int index = x + z * 16;
+        int[] surface = this.surfaceY[type.ordinal()];
+        if (surface == null || surface[index] == UNKNOWN) {
+            surface = this.workOutSurface(type);
+        }
+        int value = surface[index];
+        return value == Integer.MIN_VALUE ? fallback : value;
+    }
+
+    private int[] workOutSurface(net.minecraft.world.level.levelgen.Heightmap.Types type) {
+        int[] surface = this.surfaceY[type.ordinal()];
+        if (surface == null) {
+            surface = new int[256];
+            Arrays.fill(surface, UNKNOWN);
+        }
+        int cubeX = Coords.blockToCube(Coords.sectionToMinBlock(this.chunkX));
+        int cubeZ = Coords.blockToCube(Coords.sectionToMinBlock(this.chunkZ));
+        List<CubeAccess> cubes = this.view.cubesTopDown(cubeX, cubeZ);
+        SkyRoofs.Roof[] roofs = this.unloadedRoofs(cubes);
+        java.util.function.Predicate<BlockState> counts = type.isOpaque();
+        int sectionInCubeX = Coords.cubeLocalSection(this.chunkX), sectionInCubeZ = Coords.cubeLocalSection(this.chunkZ);
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                int index = x + z * 16;
+                if (surface[index] != UNKNOWN) {
+                    continue;
+                }
+                int top = findSurfaceY(cubes, sectionInCubeX, sectionInCubeZ, x, z, counts);
+                for (SkyRoofs.Roof roof : roofs) {
+                    int roofed = roof.sourceY(x, z);
+                    if (roofed != Integer.MIN_VALUE) {
+                        top = Math.max(top, roofed);
+                        break;
+                    }
+                }
+                surface[index] = top;
+            }
+        }
+        this.surfaceY[type.ordinal()] = surface;
+        return surface;
+    }
+
+    private static int findSurfaceY(List<CubeAccess> cubesTopDown, int sectionInCubeX, int sectionInCubeZ, int localX, int localZ,
+            java.util.function.Predicate<BlockState> counts) {
+        for (CubeAccess cube : cubesTopDown) {
+            LevelChunkSection[] sections = cube.getSections();
+            for (int sectionInCubeY = CubicConstants.DIAMETER_IN_SECTIONS - 1; sectionInCubeY >= 0; sectionInCubeY--) {
+                LevelChunkSection section = sections[Coords.sectionToIndex(sectionInCubeX, sectionInCubeY, sectionInCubeZ)];
+                if (section.hasOnlyAir()) {
+                    continue;
+                }
+                int sectionMinY = Coords.cubeToMinBlock(cube.cc_getCubePos().getY()) + sectionInCubeY * 16;
+                for (int y = 15; y >= 0; y--) {
+                    if (counts.test(section.getBlockState(localX, y, localZ))) {
+                        return sectionMinY + y + 1;
+                    }
+                }
+            }
+        }
+        return Integer.MIN_VALUE;
     }
 
     @Override public int getLowestSourceY(int x, int z) {

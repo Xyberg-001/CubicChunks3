@@ -202,7 +202,8 @@ public class LevelCube extends CubeAccess implements LevelClo {
                 return null;
             } else {
                 var block = state.getBlock();
-                // TODO (P2) heightmaps - see vanilla equivalent to this method
+                // as vanilla's heightmap updates: the column's surface is worked out again when next asked (CubicSkyLightSources)
+                ((CubeSource) this.level.getChunkSource()).cc_onCubeBlockChanged(pos);
                 boolean isOnlyAir = chunkSection.hasOnlyAir();
                 if (wasOnlyAir != isOnlyAir) {
                     this.level.getChunkSource().getLightEngine().updateSectionStatus(pos, isOnlyAir);

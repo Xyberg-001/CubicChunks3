@@ -248,6 +248,20 @@ public final class CubicLight {
         }
     }
 
+    /** What a heightmap of this type would say for a block column of the cubic level (see CubicSkyLightSources.getSurfaceY). */
+    public int surfaceY(net.minecraft.world.level.levelgen.Heightmap.Types type, int x, int z, int fallback) {
+        return this.column(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z)).sources()
+                .getSurfaceY(type, SectionPos.sectionRelative(x), SectionPos.sectionRelative(z), fallback);
+    }
+
+    /** A block changed (heightmaps may have changed with it, if not the light). */
+    public void onBlockChangedForSurface(BlockPos pos) {
+        CubicLightColumn column = this.columns.get(ChunkPos.pack(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ())));
+        if (column != null) {
+            column.sources().forgetSurface(SectionPos.sectionRelative(pos.getX()), SectionPos.sectionRelative(pos.getZ()));
+        }
+    }
+
     /** A block changed how it passes or gives light (vanilla's LevelChunk.setBlockState does the same for a chunk). */
     public void onBlockChanged(BlockPos pos) {
         CubicLightColumn column = this.columns.get(ChunkPos.pack(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ())));

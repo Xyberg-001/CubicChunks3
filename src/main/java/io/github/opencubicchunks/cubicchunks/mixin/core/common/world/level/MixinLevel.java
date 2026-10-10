@@ -100,6 +100,37 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
         return !this.isOutsideBuildHeight(y);
     }
 
+    /**
+     * A cubic column keeps no heightmaps: the surface is worked out from the cubes this side holds and the roofs noted above them (see
+     * CubicSkyLightSources.getSurfaceY), for what in vanilla asks for it (portals, spawns of traders and patrols, raids, rain drawn on the
+     * client...); where nothing is held or noted, on the server, the cube generator's estimate of the ground; else vanilla's bottom of the
+     * world.
+     */
+    @Inject(method = "getHeight(Lnet/minecraft/world/level/levelgen/Heightmap$Types;II)I", at = @At("HEAD"), cancellable = true)
+    private void cc_cubicSurface(net.minecraft.world.level.levelgen.Heightmap.Types type, int x, int z,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Integer> cir) {
+        int reach = io.github.opencubicchunks.cubicchunks.world.level.CubicHeight.horizontalLimit();
+        if (!this.cc_isCubic || x < -reach || z < -reach || x >= reach || z >= reach) {
+            return;
+        }
+        io.github.opencubicchunks.cubicchunks.world.lighting.CubicLight light =
+                ((io.github.opencubicchunks.cubicchunks.world.level.cube.CubeSource) this.getChunkSource()).cc_cubicLight();
+        if (light != null) {
+            int surface = light.surfaceY(type, x, z, Integer.MIN_VALUE);
+            if (surface == Integer.MIN_VALUE && (Object) this instanceof net.minecraft.server.level.ServerLevel server) {
+                // nothing loaded or noted there: the cube generator's estimate of its ground (and water), as a portal leading there needs
+                io.github.opencubicchunks.cubicchunks.api.CubeGenerator generator = io.github.opencubicchunks.cubicchunks.api.CubicApi.cubeGenerator(server);
+                io.github.opencubicchunks.cubicchunks.api.CubeGenerator.Surface estimate = generator == null ? null : generator.surface(x, z);
+                if (estimate != null) {
+                    surface = (type == net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR
+                            || type == net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR_WG
+                            ? estimate.surfaceY() : Math.max(estimate.surfaceY(), estimate.waterTopY())) + 1;
+                }
+            }
+            cir.setReturnValue(surface == Integer.MIN_VALUE ? this.getMinY() : surface);
+        }
+    }
+
     /** Horizontal bounds shrink to what a packed block position holds (see MixinBlockPos), in every world. */
     @ModifyConstant(method = {"isInWorldBoundsHorizontal", "getHeight"}, constant = @Constant(intValue = 30000000))
     private static int cc_horizontalBound(int bound) {

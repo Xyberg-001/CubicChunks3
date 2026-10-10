@@ -64,6 +64,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("skyroof")) skyRoof(context, world);
             if (stage("border")) border(context, world);
             if (stage("dimensions")) dimensions(context, world);
+            if (stage("heightmaps")) heightmaps(context, world);
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
             if (stage("shaders")) shaders(context, world);
@@ -869,6 +870,67 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
                     + ", block under the player " + mc.level.getBlockState(mc.player.blockPosition().below()).getBlock());
             LOGGER.info("[cc-gametest] dimensions: {}; {}", server, client);
         }
+    }
+
+    /**
+     * A cubic column keeps no heightmaps; Level.getHeight works the surface out from the cubes held (CubicSkyLightSources.getSurfaceY). Around
+     * the player, on both sides, it is compared with the highest block found by looking down each column; then a stone and a fence (which
+     * changes no light) are put above the ground, and the surface must follow.
+     */
+    private static void heightmaps(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("tp @a 0 40 0");
+        context.waitTicks(LOAD_TICKS);
+        LOGGER.info("[cc-gametest] heightmaps: arrived: server {}; client {}",
+                world.getServer().computeOnServer(s -> surfaceCheck(s.overworld())), context.computeOnClient(mc -> surfaceCheck(mc.level)));
+        int top = world.getServer().computeOnServer(s -> s.overworld().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, 12, 12));
+        world.getServer().runCommand("setblock 12 " + (top + 6) + " 12 minecraft:stone");
+        world.getServer().runCommand("setblock 14 " + (top + 4) + " 14 minecraft:oak_fence");
+        context.waitTicks(20);
+        String after = world.getServer().computeOnServer(s -> {
+            var level = s.overworld();
+            return "stone column " + level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, 12, 12) + " (want "
+                    + (top + 7) + "), fence column " + level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, 14, 14)
+                    + " motion blocking / " + level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, 14, 14)
+                    + " world surface (want " + (top + 5) + " if the ground there is at most as high)";
+        });
+        String clientAfter = context.computeOnClient(mc -> "client stone column " + mc.level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, 12, 12)
+                + ", fence column " + mc.level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, 14, 14));
+        LOGGER.info("[cc-gametest] heightmaps: after placing: {}; {}", after, clientAfter);
+        world.getServer().runCommand("setblock 12 " + (top + 6) + " 12 minecraft:air");
+        world.getServer().runCommand("setblock 14 " + (top + 4) + " 14 minecraft:air");
+    }
+
+    /**
+     * Level.getHeight against the highest block found looking down from Y 1100 (over the other stages' roofs), over a grid around 0, 0: how
+     * many agree, and how many are higher because of a roof in cubes this side does not hold (only noted: the client's from the server).
+     */
+    private static String surfaceCheck(net.minecraft.world.level.Level level) {
+        int agree = 0, total = 0, roofed = 0;
+        String firstMiss = "";
+        for (var type : new net.minecraft.world.level.levelgen.Heightmap.Types[]{net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR}) {
+            for (int x = -48; x <= 48; x += 8) {
+                for (int z = -48; z <= 48; z += 8) {
+                    int want = Integer.MIN_VALUE;
+                    for (int y = 1100; y > -300; y--) {
+                        if (type.isOpaque().test(level.getBlockState(new BlockPos(x, y, z)))) {
+                            want = y + 1;
+                            break;
+                        }
+                    }
+                    int got = level.getHeight(type, x, z);
+                    total++;
+                    if (got == want) {
+                        agree++;
+                    } else if (got > want) {
+                        roofed++;
+                    } else if (firstMiss.isEmpty()) {
+                        firstMiss = ", first miss " + type + " " + x + "," + z + ": got " + got + " want " + want;
+                    }
+                }
+            }
+        }
+        return agree + " of " + total + " agree, " + roofed + " roofed by cubes not held" + firstMiss;
     }
 
     private static void loadCubeAndWait(ClientGameTestContext context, TestSingleplayerContext world, net.minecraft.server.level.TicketType ticket,
