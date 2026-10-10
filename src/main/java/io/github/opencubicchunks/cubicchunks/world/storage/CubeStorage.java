@@ -46,6 +46,8 @@ public class CubeStorage implements AutoCloseable {
     private final ExecutorService io;
     private @Nullable SaveCubeColumns save;
     private volatile boolean closed;
+    /** Cube and column writes queued and not done yet. */
+    private final java.util.concurrent.atomic.AtomicInteger pendingWrites = new java.util.concurrent.atomic.AtomicInteger();
 
     public CubeStorage(Path directory, String name) {
         this.directory = directory;
@@ -68,8 +70,14 @@ public class CubeStorage implements AutoCloseable {
         }, io);
     }
 
+    /** Cube and column writes queued and not done yet (a sweep generating cubes waits for the disk when they pile up). */
+    public int pendingWrites() {
+        return this.pendingWrites.get();
+    }
+
     /** Writes the cube's data (built by the supplier, on this storage's thread) over any saved before. */
     public CompletableFuture<Void> write(CubePos pos, Supplier<CompoundTag> data) {
+        this.pendingWrites.incrementAndGet();
         return CompletableFuture.runAsync(() -> {
             CompoundTag tag = data.get();
             try {
@@ -78,6 +86,8 @@ public class CubeStorage implements AutoCloseable {
                 save().save3d(new EntryLocation3D(pos.getX(), pos.getY(), pos.getZ()), ByteBuffer.wrap(out.toByteArray()));
             } catch (IOException e) {
                 throw new RuntimeException("Failed to write cube " + pos, e);
+            } finally {
+                this.pendingWrites.decrementAndGet();
             }
         }, io);
     }
@@ -99,6 +109,7 @@ public class CubeStorage implements AutoCloseable {
 
     /** Writes a column's data (built by the supplier, on this storage's thread) over any saved before. */
     public CompletableFuture<Void> writeColumn(int x, int z, Supplier<CompoundTag> data) {
+        this.pendingWrites.incrementAndGet();
         return CompletableFuture.runAsync(() -> {
             CompoundTag tag = data.get();
             try {
@@ -107,6 +118,8 @@ public class CubeStorage implements AutoCloseable {
                 save().save2d(new EntryLocation2D(x, z), ByteBuffer.wrap(out.toByteArray()));
             } catch (IOException e) {
                 throw new RuntimeException("Failed to write column " + x + ", " + z, e);
+            } finally {
+                this.pendingWrites.decrementAndGet();
             }
         }, io);
     }

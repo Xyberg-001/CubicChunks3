@@ -19,6 +19,9 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 public interface ServerCubeCache extends CubeSource {
     CompletableFuture<ChunkResult<CubeAccess>> cc_getCubeFuture(int pX, int pY, int pZ, ChunkStatus pChunkStatus, boolean pLoad);
 
+    /** The cube's future without waiting for it: server thread only (cc_getCubeFuture there blocks the thread until the cube is done). */
+    CompletableFuture<ChunkResult<CubeAccess>> cc_getCubeFutureNoWait(int x, int y, int z, ChunkStatus status, boolean load);
+
     void cc_blockChanged(BlockPos pos);
 
     void cc_onLightUpdate(LightLayer pType, SectionPos pPos);

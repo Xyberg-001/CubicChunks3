@@ -173,6 +173,10 @@ public abstract class MixinChunkMap extends MixinChunkStorage implements Generat
     }
 
 
+    @Override public int cc_pendingCubeWrites() {
+        return cc_cubeStorage == null ? 0 : cc_cubeStorage.pendingWrites();
+    }
+
     @Override public java.util.concurrent.Executor cc_mainThreadExecutor() {
         return this.mainThreadExecutor;
     }

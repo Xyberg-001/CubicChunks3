@@ -193,6 +193,29 @@ public final class CubicApi {
         });
     }
 
+    /**
+     * Has the cube loaded (generated if need be) and held as full by a ticket of the given type until {@link #releaseCube}: the future
+     * completes on the server thread with whether it became full. Server thread only. The ticket type must load and never expire (as vanilla's
+     * addTicketAndLoadWithRadius asks); a pre-generation sweep holds its cubes so.
+     */
+    public static java.util.concurrent.CompletableFuture<Boolean> loadCube(ServerLevel level, net.minecraft.server.level.TicketType type, int cubeX,
+            int cubeY, int cubeZ) {
+        var cache = (io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource();
+        cache.cc_addTicketWithRadius(type, io.github.opencubicchunks.cc_core.world.level.CloPos.cube(cubeX, cubeY, cubeZ), 0);
+        return cache.cc_getCubeFutureNoWait(cubeX, cubeY, cubeZ, ChunkStatus.FULL, true).thenApply(result -> result.isSuccess());
+    }
+
+    /** Lets go of a cube held by {@link #loadCube} with the ticket type (server thread). */
+    public static void releaseCube(ServerLevel level, net.minecraft.server.level.TicketType type, int cubeX, int cubeY, int cubeZ) {
+        ((io.github.opencubicchunks.cubicchunks.server.level.ServerCubeCache) level.getChunkSource())
+                .cc_removeTicketWithRadius(type, io.github.opencubicchunks.cc_core.world.level.CloPos.cube(cubeX, cubeY, cubeZ), 0);
+    }
+
+    /** Cube and column writes queued for the level's disk and not done yet (from any thread). */
+    public static int pendingCubeWrites(ServerLevel level) {
+        return ((io.github.opencubicchunks.cubicchunks.server.level.CubicChunkMap) level.getChunkSource().chunkMap).cc_pendingCubeWrites();
+    }
+
     /** Forgets a level's cube generator as the level unloads (Cubic Chunks calls this). */
     public static void forgetLevel(ServerLevel level) {
         GENERATORS.remove(level);

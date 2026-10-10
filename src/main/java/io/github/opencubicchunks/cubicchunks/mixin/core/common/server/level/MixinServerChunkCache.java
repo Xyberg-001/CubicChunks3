@@ -234,6 +234,11 @@ public abstract class MixinServerChunkCache extends MixinChunkSource implements 
         return completablefuture;
     }
 
+    @Override public CompletableFuture<ChunkResult<CubeAccess>> cc_getCubeFutureNoWait(int x, int y, int z, ChunkStatus status, boolean load) {
+        if (Thread.currentThread() != this.mainThread) throw new IllegalStateException("cc_getCubeFutureNoWait off the server thread");
+        return this.cc_getCubeFutureMainThread(x, y, z, status, load);
+    }
+
     @TransformFromMethod("getChunkFutureMainThread(IILnet/minecraft/world/level/chunk/status/ChunkStatus;Z)Ljava/util/concurrent/CompletableFuture;")
     private native CompletableFuture<ChunkResult<CubeAccess>> cc_getCubeFutureMainThread(
             int pX, @AddUnusedParam int chunkY, int pZ, ChunkStatus pChunkStatus, boolean pLoad

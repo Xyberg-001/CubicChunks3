@@ -23,6 +23,9 @@ public interface CubicChunkMap {
     /** The cube's saved data, or empty if it was never saved (read on the cube storage's thread, after any pending writes). */
     CompletableFuture<Optional<CompoundTag>> cc_readSavedCube(CubePos cubePos);
 
+    /** Cube and column writes queued on the cube store and not done yet (0 when the level has none). */
+    int cc_pendingCubeWrites();
+
     /** The server thread's executor (where holders are looked up and generation tasks scheduled). */
     java.util.concurrent.Executor cc_mainThreadExecutor();
 }
