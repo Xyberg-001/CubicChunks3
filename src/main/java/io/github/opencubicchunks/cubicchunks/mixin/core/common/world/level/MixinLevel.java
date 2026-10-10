@@ -101,12 +101,12 @@ public abstract class MixinLevel implements CubicLevel, MarkableAsCubic, LevelAc
     }
 
     /** Horizontal bounds shrink to what a packed block position holds (see MixinBlockPos), in every world. */
-    @ModifyConstant(method = "isInWorldBoundsHorizontal", constant = @Constant(intValue = 30000000))
+    @ModifyConstant(method = {"isInWorldBoundsHorizontal", "getHeight"}, constant = @Constant(intValue = 30000000))
     private static int cc_horizontalBound(int bound) {
         return CubicHeight.horizontalLimit();
     }
 
-    @ModifyConstant(method = "isInWorldBoundsHorizontal", constant = @Constant(intValue = -30000000))
+    @ModifyConstant(method = {"isInWorldBoundsHorizontal", "getHeight"}, constant = @Constant(intValue = -30000000))
     private static int cc_horizontalBoundNegative(int bound) {
         return -CubicHeight.horizontalLimit();
     }

@@ -91,4 +91,17 @@ public abstract class MixinEntity implements EntityCubePosGetter {
     }
 
     // TODO (P2) teleportation code needs CC changes
+
+    /** Entities are held within what a block position holds, as vanilla holds them within 30,000,000 (see CubicHeight). */
+    @org.spongepowered.asm.mixin.injection.ModifyConstant(method = "absSnapTo(DDD)V",
+            constant = @org.spongepowered.asm.mixin.injection.Constant(doubleValue = 3.0E7))
+    private double cc_movementLimitMax(double limit) {
+        return io.github.opencubicchunks.cubicchunks.world.level.CubicHeight.movementLimit();
+    }
+
+    @org.spongepowered.asm.mixin.injection.ModifyConstant(method = "absSnapTo(DDD)V",
+            constant = @org.spongepowered.asm.mixin.injection.Constant(doubleValue = -3.0E7))
+    private double cc_movementLimitMin(double limit) {
+        return -io.github.opencubicchunks.cubicchunks.world.level.CubicHeight.movementLimit();
+    }
 }

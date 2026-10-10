@@ -62,6 +62,7 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             if (stage("tint")) tintCaches(context);
             if (stage("lightsync")) lightSync(context, world);
             if (stage("skyroof")) skyRoof(context, world);
+            if (stage("border")) border(context, world);
             if (stage("scans")) blockScans(context, world);
             if (stage("viewdistance")) viewDistance(context, world);
             if (stage("shaders")) shaders(context, world);
@@ -812,6 +813,28 @@ public class CubicRenderClientGameTest implements FabricClientGameTest {
             io.github.opencubicchunks.cubicchunks.api.CubicApi.releaseCube(server.overworld(), ticket, cubeX, lowCubeY, cubeZ);
             io.github.opencubicchunks.cubicchunks.api.CubicApi.releaseCube(server.overworld(), ticket, openCubeX, lowCubeY, cubeZ);
         });
+    }
+
+    /**
+     * The world border reaches no farther than a packed block position holds, less a margin (CubicHeight.borderLimit), on the server and on
+     * the client (never told the server's absolute maximum); /forceload refuses beyond it.
+     */
+    private static void border(ClientGameTestContext context, TestSingleplayerContext world) {
+        int limit = CubicHeight.borderLimit();
+        String server = world.getServer().computeOnServer(s -> {
+            var border = s.overworld().getWorldBorder();
+            return "server border absolute max " + border.getAbsoluteMaxSize() + ", x " + border.getMinX() + ".." + border.getMaxX();
+        });
+        String client = context.computeOnClient(mc -> {
+            var border = mc.level.getWorldBorder();
+            return "client border absolute max " + border.getAbsoluteMaxSize() + ", x " + border.getMinX() + ".." + border.getMaxX();
+        });
+        world.getServer().runCommand("forceload add " + (limit + 100) + " 0");
+        world.getServer().runCommand("forceload add " + (limit - 100) + " 0");
+        int forced = world.getServer().computeOnServer(s -> s.overworld().getForceLoadedChunks().size());
+        world.getServer().runCommand("forceload remove all");
+        LOGGER.info("[cc-gametest] border: limit {} (positions hold +-{}); {}; {}; forceloaded after one call beyond and one within: {}", limit,
+                CubicHeight.horizontalLimit(), server, client, forced);
     }
 
     private static void loadCubeAndWait(ClientGameTestContext context, TestSingleplayerContext world, net.minecraft.server.level.TicketType ticket,

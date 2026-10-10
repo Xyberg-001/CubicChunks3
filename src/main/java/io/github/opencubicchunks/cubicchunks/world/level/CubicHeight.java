@@ -49,6 +49,22 @@ public final class CubicHeight {
         return BlockPos.MAX_HORIZONTAL_COORDINATE + 1;
     }
 
+    /**
+     * Farthest the world border reaches from 0 on x and z (vanilla: 29,999,984): the packing's limit less a margin, so that nothing loaded
+     * around a player at the border (view distance, a far-view mod's generation) reaches past what a block position holds, where positions
+     * would wrap around to the other side of the world. Applies to every world, as the packing does.
+     */
+    public static int borderLimit() {
+        return horizontalLimit() - BORDER_MARGIN;
+    }
+
+    /** Where entities are held (vanilla: 30,000,000, just past its border). */
+    public static double movementLimit() {
+        return borderLimit() + 16;
+    }
+
+    private static final int BORDER_MARGIN = 65_536;
+
     /** A level's own height limits (implemented on Level, see MixinLevel); a level that is not cubic answers with its dimension's. */
     public interface BuildHeight {
         int cc_minBuildY();
