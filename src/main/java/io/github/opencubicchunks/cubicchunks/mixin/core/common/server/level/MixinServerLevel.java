@@ -142,14 +142,17 @@ public abstract class MixinServerLevel extends MixinLevel implements CubicServer
         for (net.minecraft.world.level.chunk.LevelChunkSection section : cube.getSections()) {
             mayHavePoi |= !section.hasOnlyAir() && section.maybeHas(net.minecraft.world.entity.ai.village.poi.PoiTypes::hasPoi);
         }
-        if (!mayHavePoi) {
-            return;
-        }
-        // the cube's points of interest are read from disk off the server thread first (a cube's read waited behind the cubes loading,
-        // seconds at a time); then checked here, if the cube is still loaded
+        boolean check = mayHavePoi;
+        // Every loaded cube's points of interest are read from disk off the server thread (as vanilla prefetches a chunk's as it loads): the
+        // searches for them (villagers' beds and job sites) look through every cube around, and read each one not read yet from disk on the
+        // server thread otherwise, waiting behind the cubes loading (24 such waits, 3 s, in one stall while flying). A cube that may hold
+        // points of interest is then checked against its blocks here, if it is still loaded.
         ServerLevel level = (ServerLevel) (Object) this;
         net.minecraft.world.entity.ai.village.poi.PoiManager poi = level.getPoiManager();
         ((io.github.opencubicchunks.cubicchunks.world.level.CubicSectionStorage) poi).cc_prefetchCube(cubePos, level.getServer()).thenRun(() -> {
+            if (!check) {
+                return;
+            }
             io.github.opencubicchunks.cubicchunks.world.level.cube.CubeAccess loaded = this.cc_getCubeSource().cc_getFullCubeNow(cubePos);
             if (loaded == null || !this.cc_poiCheckedCubes.contains(key)) {
                 return;
