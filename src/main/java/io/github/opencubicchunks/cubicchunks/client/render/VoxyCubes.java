@@ -148,6 +148,22 @@ public final class VoxyCubes {
         LevelLightEngine light = level.getLightEngine();
         DataLayer blockLight = light.getLayerListener(LightLayer.BLOCK).getDataLayerData(pos);
         DataLayer skyLight = light.getLayerListener(LightLayer.SKY).getDataLayerData(pos);
+        if (skyLight == null && !section.hasOnlyAir()) {
+            // A section with no sky light of its own takes it from the sections above (open sky over the highest stored one): Voxy is
+            // given the light the level reads there rather than none, which it kept as darkness (black patches in its distant terrain;
+            // a few hundred such sections every half minute while flying).
+            skyLight = new DataLayer();
+            BlockPos.MutableBlockPos at = new BlockPos.MutableBlockPos();
+            for (int y = 0; y < 16; y++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        skyLight.set(x, y, z, light.getLayerListener(LightLayer.SKY).getLightValue(
+                                at.set(SectionPos.sectionToBlockCoord(pos.x(), x), SectionPos.sectionToBlockCoord(pos.y(), y),
+                                        SectionPos.sectionToBlockCoord(pos.z(), z))));
+                    }
+                }
+            }
+        }
         boolean ignored = (boolean) RAW_INGEST.invoke(world, section, pos.x(), pos.y(), pos.z(), blockLight, skyLight);
     }
 }
