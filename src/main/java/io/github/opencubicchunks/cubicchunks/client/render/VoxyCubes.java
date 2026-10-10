@@ -95,9 +95,13 @@ public final class VoxyCubes {
 
     /** Cubes waiting to go to Voxy until their light is worked out (client thread), by the time they became ready. */
     private static final java.util.LinkedHashMap<Long, Long> WAITING = new java.util.LinkedHashMap<>();
-    /** How long a cube waits at least, and at most. */
+    /** When each held cube's light from the server went into the client's light engine (client thread). */
+    private static final it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap LIGHT_IN = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+    /** How long a cube waits at least; and how long after its light went in it waits for the light engine to be idle. */
     private static final long MIN_WAIT_MS = 1_000;
-    private static final long MAX_WAIT_MS = 10_000;
+    private static final long SETTLE_MS = 2_000;
+    /** A cube whose light never came is let go (not handed over dark). */
+    private static final long GIVE_UP_MS = 60_000;
 
     /**
      * Hands the cube to Voxy once its light is worked out (client thread). A cube becomes ready to render with its light data in, but the
@@ -111,7 +115,37 @@ public final class VoxyCubes {
         WAITING.putIfAbsent(cube.cc_getCubePos().asLong(), System.currentTimeMillis());
     }
 
-    /** Hands the waiting cubes whose light is worked out (the light engine has no work left, or they waited long enough) to Voxy. */
+    /**
+     * The cube's light from the server is in the client's light engine (client thread; the light comes through the level's light queue,
+     * a tenth of it a frame, so while flying it can arrive seconds after the cube: the engine being idle said nothing about it).
+     */
+    public static void lightApplied(CubePos pos) {
+        if (RAW_INGEST != null) {
+            LIGHT_IN.put(pos.asLong(), System.currentTimeMillis());
+        }
+    }
+
+    /** A cube (again) arrived from the server: its light is not in until its queued light runs (an earlier copy's mark goes). */
+    public static void cubeArrived(CubePos pos) {
+        if (RAW_INGEST != null) {
+            LIGHT_IN.remove(pos.asLong());
+        }
+    }
+
+    /** As the cube leaves: Voxy gets its last state if its light came, never a cube that is still dark. */
+    public static void ingestOnUnload(Level level, LevelCube cube) {
+        if (RAW_INGEST == null) {
+            return;
+        }
+        long key = cube.cc_getCubePos().asLong();
+        WAITING.remove(key);
+        if (LIGHT_IN.containsKey(key)) {
+            LIGHT_IN.remove(key);
+            ingest(level, cube);
+        }
+    }
+
+    /** Hands the waiting cubes whose light came and is worked through (the light engine is idle, or it had time to settle) to Voxy. */
     public static void ingestLit(Level level) {
         if (WAITING.isEmpty()) {
             return;
@@ -125,7 +159,11 @@ public final class VoxyCubes {
             if (waited < MIN_WAIT_MS) {
                 break; // the rest became ready later still
             }
-            if (!lightIdle && waited < MAX_WAIT_MS) {
+            long lightIn = LIGHT_IN.getOrDefault(entry.getKey().longValue(), -1L);
+            if (lightIn < 0 || (!lightIdle && now - lightIn < SETTLE_MS)) {
+                if (waited > GIVE_UP_MS) {
+                    it.remove();
+                }
                 continue;
             }
             it.remove();
@@ -170,8 +208,8 @@ public final class VoxyCubes {
         int sectionY = SectionPos.blockToSectionCoord(pos.getY());
         int sectionZ = SectionPos.blockToSectionCoord(pos.getZ());
         LevelCube cube = SodiumCubes.cubeOfSection(level, sectionX, sectionY, sectionZ);
-        if (cube == null) {
-            return;
+        if (cube == null || !LIGHT_IN.containsKey(cube.cc_getCubePos().asLong()) || WAITING.containsKey(cube.cc_getCubePos().asLong())) {
+            return; // not lit yet: the cube goes over whole once it is
         }
         try {
             Object world = WORLD_IDENTIFIER.invoke(level);

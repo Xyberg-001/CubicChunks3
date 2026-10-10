@@ -75,7 +75,7 @@ public abstract class MixinClientLevel extends MixinLevel implements CubicClient
     }
 
     @Override public void cc_onCubeUnloaded(LevelCube cube) {
-        VoxyCubes.ingest((ClientLevel) (Object) this, cube); // its latest state, light included (the light leaves later, queued)
+        VoxyCubes.ingestOnUnload((ClientLevel) (Object) this, cube); // its latest state, light included (the light leaves later, queued)
         cube.clearAllBlockEntities();
         ((CubicEntitySections.Manager) this.entityStorage).cc_updateCubeStatus(cube.cc_getCubePos(), Visibility.TRACKED);
         if (this.cc_renderReadiness != null) {

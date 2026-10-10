@@ -62,6 +62,7 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
             ((ClientCubeCache) (level.getChunkSource())).cc_replaceWithPacketData(x, y, z, payload.cubeData.getReadBuffer(), heightmaps,
                     entityTagConsumer);
 
+            io.github.opencubicchunks.cubicchunks.client.render.VoxyCubes.cubeArrived(payload.pos);
             // as vanilla's handleLevelChunkWithLight: the server's light goes to the engine, and the cube's sections join it, in order with
             // other cubes' arriving and leaving
             ((ClientLevel) level).queueLightUpdate(() -> {
@@ -72,6 +73,7 @@ public record CCClientboundLevelCubeWithLightPacket(CubePos pos, CCClientboundLe
                     if (light != null) {
                         light.onCubeLitByServer(levelCube);
                     }
+                    io.github.opencubicchunks.cubicchunks.client.render.VoxyCubes.lightApplied(payload.pos);
                     // as 26.3's enableChunkLight: the cube's sections and their neighbours are dirty now that it can render
                     int minSectionX = Coords.cubeToSection(x, 0);
                     int minSectionY = Coords.cubeToSection(y, 0);
