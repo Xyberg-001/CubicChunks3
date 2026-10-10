@@ -29,6 +29,7 @@ public abstract class MixinSodiumWorldRenderer {
 
     @Inject(method = "processChunkEvents", at = @At("TAIL"))
     private void cc_processCubeEvents(CallbackInfo ci) {
+        VoxyCubes.ingestLit(this.level);
         CubeRenderReadiness readiness = SodiumCubes.readiness(this.level);
         if (readiness != null) {
             RenderSectionManager sections = this.renderSectionManager;
@@ -47,15 +48,15 @@ public abstract class MixinSodiumWorldRenderer {
     }
 
     /**
-     * A ready cube's sections (Sodium reads each from the cube, so a cube no longer held is left out). The cube goes to Voxy too, if installed:
-     * its light is in by now.
+     * A ready cube's sections (Sodium reads each from the cube, so a cube no longer held is left out). The cube goes to Voxy too, if installed,
+     * once its light is worked out (VoxyCubes.ingestWhenLit).
      */
     private void cc_addSections(int cubeX, int cubeY, int cubeZ) {
         LevelCube cube = SodiumCubes.cubeOfSection(this.level, Coords.cubeToSection(cubeX, 0), Coords.cubeToSection(cubeY, 0),
                 Coords.cubeToSection(cubeZ, 0));
         if (cube != null) {
             SodiumCubes.forEachSection(cubeX, cubeY, cubeZ, this.renderSectionManager::onSectionAdded);
-            VoxyCubes.ingest(this.level, cube);
+            VoxyCubes.ingestWhenLit(cube);
         }
     }
 

@@ -93,6 +93,51 @@ public final class VoxyCubes {
         return MAX_SECTION_Y;
     }
 
+    /** Cubes waiting to go to Voxy until their light is worked out (client thread), by the time they became ready. */
+    private static final java.util.LinkedHashMap<Long, Long> WAITING = new java.util.LinkedHashMap<>();
+    /** How long a cube waits at least, and at most. */
+    private static final long MIN_WAIT_MS = 1_000;
+    private static final long MAX_WAIT_MS = 10_000;
+
+    /**
+     * Hands the cube to Voxy once its light is worked out (client thread). A cube becomes ready to render with its light data in, but the
+     * client's light engine works the light through it over the next frames: handed over at once, Voxy kept sections whose sky light was
+     * still all dark (tens every half minute while flying), black patches in its distant terrain that stayed after the light came.
+     */
+    public static void ingestWhenLit(LevelCube cube) {
+        if (RAW_INGEST == null) {
+            return;
+        }
+        WAITING.putIfAbsent(cube.cc_getCubePos().asLong(), System.currentTimeMillis());
+    }
+
+    /** Hands the waiting cubes whose light is worked out (the light engine has no work left, or they waited long enough) to Voxy. */
+    public static void ingestLit(Level level) {
+        if (WAITING.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        boolean lightIdle = !level.getLightEngine().hasLightWork();
+        java.util.Iterator<java.util.Map.Entry<Long, Long>> it = WAITING.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<Long, Long> entry = it.next();
+            long waited = now - entry.getValue();
+            if (waited < MIN_WAIT_MS) {
+                break; // the rest became ready later still
+            }
+            if (!lightIdle && waited < MAX_WAIT_MS) {
+                continue;
+            }
+            it.remove();
+            CubePos pos = CubePos.from(entry.getKey());
+            LevelCube cube = SodiumCubes.cubeOfSection(level, Coords.cubeToSection(pos.getX(), 0), Coords.cubeToSection(pos.getY(), 0),
+                    Coords.cubeToSection(pos.getZ(), 0));
+            if (cube != null) { // a cube dropped meanwhile went over as it was dropped
+                ingest(level, cube);
+            }
+        }
+    }
+
     /** Hands each of the cube's sections, with its light, to Voxy (client thread). */
     public static void ingest(Level level, LevelCube cube) {
         if (RAW_INGEST == null || WORLD_IDENTIFIER == null) {
