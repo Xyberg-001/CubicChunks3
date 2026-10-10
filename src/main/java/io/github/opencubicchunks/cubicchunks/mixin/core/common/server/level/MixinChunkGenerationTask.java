@@ -22,7 +22,13 @@ import io.github.opencubicchunks.cubicchunks.server.level.GenerationCloHolder;
 import io.github.opencubicchunks.cubicchunks.util.StaticCache3D;
 import io.github.opencubicchunks.cubicchunks.world.level.cube.status.CubePyramid;
 import net.minecraft.server.level.ChunkGenerationTask;
+import java.util.concurrent.CompletableFuture;
+
+import io.github.opencubicchunks.cubicchunks.server.level.CubicChunkMap;
+import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.ChunkResult;
 import net.minecraft.server.level.GeneratingChunkMap;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.server.level.GenerationChunkHolder;
 import net.minecraft.util.StaticCache2D;
 import net.minecraft.util.profiling.Profiler;
@@ -54,6 +60,7 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
     @Shadow @Final public ChunkStatus targetStatus;
     @Shadow private volatile boolean markedForCancellation;
     @Shadow @Final private StaticCache2D<GenerationChunkHolder> cache;
+    @Shadow @Final private java.util.List<CompletableFuture<ChunkResult<ChunkAccess>>> scheduledLayer;
     @AddFieldToSets(containers = ChunkToCubeSet.ChunkGenerationTask_redirects.class, field = "pos:Lnet/minecraft/world/level/ChunkPos;")
     private CubePos cc_cubePos;
     // scheduledChunkStatus must be one status higher than the scheduled status for cubes until the target status is reached, to ensure load order
@@ -81,8 +88,9 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
             + "Lnet/minecraft/world/level/ChunkPos;)Lnet/minecraft/server/level/ChunkGenerationTask;")
     @Public private static ChunkGenerationTask cc_createCubeGenerationTask(GeneratingChunkMap chunkMap, ChunkStatus targetStatus, CubePos pos) {
         int cubeRadius = CubePyramid.CC_GENERATION_PYRAMID_CUBES.getStepTo(targetStatus).getAccumulatedRadiusOf(ChunkStatus.EMPTY);
-        // the columns: the cube's own and those around it as far as the generation layers reach (cc_chunkRadiusForLayer, widest for EMPTY)
-        int chunkRadius = cc_chunkRadius(targetStatus, ChunkStatus.EMPTY, true);
+        // the columns under the task's cubes (their own generation, structures 8 chunks around included, is the columns' tasks', see
+        // cc_scheduleColumn)
+        int chunkRadius = cubeRadius * CubicConstants.DIAMETER_IN_SECTIONS;
         int chunkDiameter = CubicConstants.DIAMETER_IN_SECTIONS + 2 * chunkRadius;
         // We directly use the StaticCache2D constructor, as the `create` factory method only allows for odd dimensions, and `chunkDiameter` is even
         // (for cube sizes greater than 16)
@@ -192,30 +200,6 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
                         }
                     }
                 }
-                // The chunks: each status the chunk layers will ask for (cc_scheduleLayer: one status ahead of the cubes, up to the target),
-                // over that layer's radius, must be there already. Checked as the cubes' dependencies instead, a column part-generated in
-                // memory (columns are not saved; structure starts leave many at STRUCTURE_STARTS) passed here and then failed in a loading
-                // layer ("Can't load chunk, but didn't expect to need to generate").
-                for (ChunkStatus status : ChunkStatus.getStatusList()) {
-                    if (status.isAfter(this.targetStatus)) {
-                        break;
-                    }
-                    int radius = this.cc_chunkRadiusForLayer(status, false);
-                    int minX = Coords.cubeToSection(this.cc_cubePos.getX(), 0) - radius;
-                    int maxX = Coords.cubeToSection(this.cc_cubePos.getX(), CubicConstants.DIAMETER_IN_SECTIONS - 1) + radius;
-                    int minZ = Coords.cubeToSection(this.cc_cubePos.getZ(), 0) - radius;
-                    int maxZ = Coords.cubeToSection(this.cc_cubePos.getZ(), CubicConstants.DIAMETER_IN_SECTIONS - 1) + radius;
-                    for (int chunkX = minX; chunkX <= maxX; chunkX++) {
-                        for (int chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
-                            ChunkStatus current = this.cache.get(chunkX, chunkZ).getPersistedStatus();
-                            if (current == null || current.isBefore(status)) {
-                                cir.setReturnValue(false);
-                                return;
-                            }
-                        }
-                    }
-                }
-
                 cir.setReturnValue(true);
             } else {
                 cir.setReturnValue(false);
@@ -253,17 +237,18 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
                 }
             }
             if (chunkStatus != null) {
-                int radius = this.cc_chunkRadiusForLayer(chunkStatus, needsGeneration);
+                // the columns under the cubes this layer reaches
+                int radius = this.cc_getCubeRadiusForLayer(chunkStatus, needsGeneration) * CubicConstants.DIAMETER_IN_SECTIONS;
                 int minX = Coords.cubeToSection(this.cc_cubePos.getX(), 0) - radius;
                 int maxX = Coords.cubeToSection(this.cc_cubePos.getX(), CubicConstants.DIAMETER_IN_SECTIONS - 1) + radius;
                 int minZ = Coords.cubeToSection(this.cc_cubePos.getZ(), 0) - radius;
                 int maxZ = Coords.cubeToSection(this.cc_cubePos.getZ(), CubicConstants.DIAMETER_IN_SECTIONS - 1) + radius;
                 for (int chunkX = minX; chunkX <= maxX; chunkX++) {
                     for (int chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
-                        GenerationChunkHolder generationchunkholder = this.cache.get(chunkX, chunkZ);
-                        if (this.markedForCancellation || !this.scheduleChunkInLayer(chunkStatus, needsGeneration, generationchunkholder)) {
+                        if (this.markedForCancellation) {
                             return;
                         }
+                        this.cc_scheduleColumn(chunkStatus, this.cache.get(chunkX, chunkZ));
                     }
                 }
             }
@@ -281,37 +266,23 @@ public abstract class MixinChunkGenerationTask implements CloGenerationTask {
     @TransformFromMethod(useRedirectSets = ChunkToCubeSet.class, owner = @Ref(ChunkGenerationTask.class), value = "getRadiusForLayer(Lnet/minecraft/world/level/chunk/status/ChunkStatus;Z)I")
     private native int cc_getCubeRadiusForLayer(ChunkStatus status, boolean needsGeneration);
 
-    /** How many chunks past the cube's columns a layer of the given status reaches (see {@link #cc_chunkRadius}). */
-    @org.spongepowered.asm.mixin.Unique
-    private int cc_chunkRadiusForLayer(ChunkStatus status, boolean needsGeneration) {
-        return cc_chunkRadius(this.targetStatus, status, needsGeneration);
-    }
-
     /**
-     * How many chunks past a cube's columns its generation needs columns at a status. A cube needs its own columns at its status (a cube is
-     * never ahead of the columns it stands in), so the cubes the task takes to a status T, cubeRadius(T) cubes around, need the columns under
-     * them at T; and a column taken to T needs the columns around it as vanilla's chunk pyramid has it (structure starts 8 chunks around,
-     * which cubes do not need, see CubeStep.Builder.addRequirement). So the columns reach, for each later status T, the cubes' radius for T
-     * in chunks plus vanilla's radius from T down to this status. Column holders are there that far: a column's level is at most that of the
-     * cubes over it, so it reaches as far as a chunk of that level does in vanilla.
+     * Has a column reach a status for the cube task: done already, or by the column's own (vanilla) generation task, which this task waits
+     * for. Driving the columns' steps from the cube task (as vanilla's task drives its neighbours') needed every column their steps read:
+     * structure starts 8 chunks around, a cache of 30 x 30 column holders made for every cube task, and the same column work set up again
+     * by every cube over it (holder lookups were most of the server thread's chunk scheduling while flying). A column's task does it once
+     * for all the cubes over it. Tasks are scheduled on the server thread, where holders are looked up.
      */
     @org.spongepowered.asm.mixin.Unique
-    private static int cc_chunkRadius(ChunkStatus targetStatus, ChunkStatus status, boolean needsGeneration) {
-        net.minecraft.world.level.chunk.status.ChunkPyramid chunkPyramid = needsGeneration
-                ? net.minecraft.world.level.chunk.status.ChunkPyramid.GENERATION_PYRAMID : net.minecraft.world.level.chunk.status.ChunkPyramid.LOADING_PYRAMID;
-        CubePyramid cubePyramid = needsGeneration ? CubePyramid.CC_GENERATION_PYRAMID_CUBES : CubePyramid.CC_LOADING_PYRAMID_CUBES;
-        int radius = 0;
-        for (ChunkStatus later : ChunkStatus.getStatusList()) {
-            if (later.isBefore(status)) {
-                continue;
-            }
-            if (later.isAfter(targetStatus)) {
-                break;
-            }
-            int cubes = cubePyramid.getStepTo(targetStatus).getAccumulatedRadiusOf(later);
-            radius = Math.max(radius, cubes * CubicConstants.DIAMETER_IN_SECTIONS + chunkPyramid.getStepTo(later).getAccumulatedRadiusOf(status));
+    private void cc_scheduleColumn(ChunkStatus status, GenerationChunkHolder column) {
+        if (column.getChunkIfPresentUnchecked(status) != null) {
+            return;
         }
-        return radius;
+        ChunkMap map = (ChunkMap) this.chunkMap;
+        this.scheduledLayer.add(CompletableFuture
+                .supplyAsync(() -> column.scheduleChunkGenerationTask(status, map), ((CubicChunkMap) map).cc_mainThreadExecutor())
+                .thenCompose(future -> future)
+                .exceptionally(error -> GenerationChunkHolder.UNLOADED_CHUNK));
     }
 
     @Shadow protected abstract boolean scheduleChunkInLayer(ChunkStatus status, boolean needsGeneration, GenerationChunkHolder chunk);

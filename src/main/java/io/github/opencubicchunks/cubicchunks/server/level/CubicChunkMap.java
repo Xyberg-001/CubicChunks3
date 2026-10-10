@@ -22,4 +22,7 @@ public interface CubicChunkMap {
 
     /** The cube's saved data, or empty if it was never saved (read on the cube storage's thread, after any pending writes). */
     CompletableFuture<Optional<CompoundTag>> cc_readSavedCube(CubePos cubePos);
+
+    /** The server thread's executor (where holders are looked up and generation tasks scheduled). */
+    java.util.concurrent.Executor cc_mainThreadExecutor();
 }
