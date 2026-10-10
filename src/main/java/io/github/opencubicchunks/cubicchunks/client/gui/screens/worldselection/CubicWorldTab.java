@@ -42,7 +42,8 @@ public class CubicWorldTab extends GridLayoutTab {
         helper.addChild(CommonLayouts.labeledElement(font, maxY, MAX_Y));
 
         helper.addChild(new MultiLineTextWidget(Component.translatable("selectWorld.cubicChunks.range",
-                CubicWorldSettings.lowestY(), CubicWorldSettings.highestY()), font).setMaxWidth(WIDTH), 2);
+                CubicWorldSettings.lowestY(), CubicWorldSettings.highestY(), String.format(java.util.Locale.ROOT, "%,d",
+                io.github.opencubicchunks.cubicchunks.world.level.CubicHeight.borderLimit())), font).setMaxWidth(WIDTH), 2);
 
         uiState.addListener(state -> {
             boolean cubic = choices.cc_isCubic();

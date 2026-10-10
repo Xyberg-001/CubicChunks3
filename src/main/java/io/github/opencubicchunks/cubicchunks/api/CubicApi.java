@@ -37,6 +37,14 @@ public final class CubicApi {
         return ((CanBeCubic) level).cc_isCubic();
     }
 
+    /**
+     * How far the world border reaches from 0 on x and z with Cubic Chunks installed, in every world (block positions are packed with more
+     * bits for Y, so they hold less far out than vanilla's 30 million; the border stops short of that).
+     */
+    public static int borderReach() {
+        return io.github.opencubicchunks.cubicchunks.world.level.CubicHeight.borderLimit();
+    }
+
     /** The lowest Y a cubic level's world holds (a level that is not cubic: its dimension's). */
     public static int minY(Level level) {
         return CubicHeight.minY(level);
